@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import sys
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -780,7 +781,7 @@ class TestCopyAdvanced:
         ):
             fsbuilder_main()
 
-        assert "validation failed" in exc_info.value.kwargs["msg"].lower()
+        assert "validation command failed" in exc_info.value.kwargs["msg"].lower()
         assert not os.path.exists(dest)
 
     def test_validate_without_percent_s_fails(self, patch_module: None, tmp_path: Any) -> None:
@@ -1582,3 +1583,287 @@ class TestCrossCutting:
 
         msg = exc_info.value.kwargs["msg"].lower()
         assert "content" in msg or "src" in msg
+
+
+# =============================================================================
+# Code review findings: New test classes
+# =============================================================================
+
+
+class TestPathNormalization:
+    """Tests for path normalization edge cases (Finding 5)."""
+
+    def test_directory_dest_root_slash(self, patch_module: None, tmp_path: Any) -> None:
+        """dest='/' doesn't crash from rstrip producing empty string.
+
+        We use check_mode to avoid actually modifying /.
+        """
+        with (
+            set_module_args({"dest": "/", "state": "directory", "_ansible_check_mode": True}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        # / already exists as a directory, so changed should be False
+        assert result["changed"] is False
+
+    def test_makedirs_empty_parent_no_crash(self, patch_module: None, tmp_path: Any) -> None:
+        """Single-component relative path doesn't crash _makedirs.
+
+        When os.path.dirname("filename") returns "", makedirs should return
+        False without crashing.
+        """
+        from plugins.modules.fsbuilder import FSBuilder
+
+        # Create a minimal mock module
+        module = MagicMock()
+        module.params = {"makedirs": True}
+        module.check_mode = False
+
+        fsb = FSBuilder(module)
+        result = fsb._makedirs("filename", module.params)
+        assert result is False
+
+
+class TestHardLinkDeviceCheck:
+    """Tests for hard-link st_dev check (Finding 4)."""
+
+    def test_hard_link_same_inode_different_device(self, patch_module: None, tmp_path: Any) -> None:
+        """Same st_ino but different st_dev should not be considered 'already correct'."""
+        from plugins.modules.fsbuilder import FSBuilder
+
+        src = str(tmp_path / "src.txt")
+        dest = str(tmp_path / "dest.txt")
+        with open(src, "w") as f:
+            f.write("content")
+        with open(dest, "w") as f:
+            f.write("content")
+
+        # Use FSBuilder directly with a mock module to test the comparison logic
+        module = MagicMock()
+        module.check_mode = False
+        module._diff = False
+        module.params = {
+            "dest": dest,
+            "src": src,
+            "state": "hard",
+            "force": True,
+            "force_backup": False,
+            "backup": False,
+            "makedirs": False,
+            "allow_unsafe_deletes": False,
+        }
+
+        fsb = FSBuilder(module)
+
+        # Mock os.stat to return same inode but different device
+        fake_dest_stat = os.stat_result((0o100644, 12345, 1, 1, 0, 0, 100, 0, 0, 0))
+        fake_src_stat = os.stat_result(
+            (0o100644, 12345, 2, 1, 0, 0, 100, 0, 0, 0)  # Different device!
+        )
+
+        original_stat = os.stat
+        original_exists = os.path.exists
+        original_islink = os.path.islink
+
+        def mock_stat(path: str) -> Any:
+            if path == dest:
+                return fake_dest_stat
+            if path == src:
+                return fake_src_stat
+            return original_stat(path)
+
+        with (
+            patch("plugins.modules.fsbuilder.os.stat", side_effect=mock_stat),
+            patch("plugins.modules.fsbuilder.os.path.exists", side_effect=original_exists),
+            patch("plugins.modules.fsbuilder.os.path.islink", side_effect=original_islink),
+            patch("plugins.modules.fsbuilder.os.link"),
+        ):
+            module.set_fs_attributes_if_different.return_value = True
+            module.load_file_common_arguments.return_value = {"path": dest}
+            result = fsb._handle_hard(module.params)
+
+        # Should be changed because st_dev differs despite same st_ino
+        assert result["changed"] is True
+
+
+class TestAbsentSafetyGuard:
+    """Tests for safety-guarded delete paths (Finding 1)."""
+
+    def test_rejects_root_path(self, patch_module: None, tmp_path: Any) -> None:
+        """dest='/' is rejected."""
+        with (
+            set_module_args({"dest": "/", "state": "absent"}),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "refusing" in exc_info.value.kwargs["msg"].lower()
+
+    def test_rejects_empty_path(self, patch_module: None, tmp_path: Any) -> None:
+        """Empty dest is rejected."""
+        with (
+            set_module_args({"dest": "", "state": "absent"}),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "refusing" in exc_info.value.kwargs["msg"].lower()
+
+    def test_rejects_root_resolving_paths(self, patch_module: None, tmp_path: Any) -> None:
+        """dest='///' resolves to '/' and is rejected."""
+        with (
+            set_module_args({"dest": "///", "state": "absent"}),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "refusing" in exc_info.value.kwargs["msg"].lower()
+
+    def test_rejects_protected_system_paths(self, patch_module: None, tmp_path: Any) -> None:
+        """Protected paths like /etc, /usr, /boot, /dev are rejected."""
+        for path in ["/etc", "/usr", "/boot", "/dev"]:
+            with (
+                set_module_args({"dest": path, "state": "absent"}),
+                pytest.raises(AnsibleFailJson) as exc_info,
+            ):
+                fsbuilder_main()
+
+            assert "refusing" in exc_info.value.kwargs["msg"].lower(), (
+                f"Expected rejection for {path}"
+            )
+
+    def test_allows_subdirectories_of_protected_paths(
+        self, patch_module: None, tmp_path: Any
+    ) -> None:
+        """Subdirectories like /etc/myapp are allowed (they just don't exist)."""
+        with (
+            set_module_args({"dest": "/etc/myapp-nonexistent-test-path", "state": "absent"}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        # Path doesn't exist, so changed=False, but no safety error
+        assert result["changed"] is False
+
+    def test_rejects_root_glob_pattern(self, patch_module: None, tmp_path: Any) -> None:
+        """Glob pattern '/*' rooted at / is rejected."""
+        with (
+            set_module_args({"dest": "/*", "state": "absent"}),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "refusing" in exc_info.value.kwargs["msg"].lower()
+
+    def test_safe_glob_still_works(self, patch_module: None, tmp_path: Any) -> None:
+        """Normal glob in a safe directory still works."""
+        for i in range(2):
+            with open(str(tmp_path / f"file{i}.tmp"), "w") as f:
+                f.write(f"temp {i}")
+
+        dest = str(tmp_path / "*.tmp")
+        with (
+            set_module_args({"dest": dest, "state": "absent"}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        for i in range(2):
+            assert not os.path.exists(str(tmp_path / f"file{i}.tmp"))
+
+    def test_allow_unsafe_deletes_overrides(self, patch_module: None, tmp_path: Any) -> None:
+        """allow_unsafe_deletes=True bypasses safety checks."""
+        # Use check_mode so we don't actually delete /etc
+        with (
+            set_module_args(
+                {
+                    "dest": "/etc",
+                    "state": "absent",
+                    "allow_unsafe_deletes": True,
+                    "_ansible_check_mode": True,
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        # Should not fail with a safety error
+        assert result["changed"] is True
+
+
+class TestValidateInfoLeakage:
+    """Tests for validate command information leakage (Finding 6)."""
+
+    def test_validate_failure_does_not_leak_command(
+        self, patch_module: None, tmp_path: Any
+    ) -> None:
+        """The primary msg field should not contain the executable path."""
+        from plugins.modules.fsbuilder import FSBuilder
+
+        validate_cmd = f"{sys.executable} -c 'import sys; sys.exit(1)' %s"
+
+        module = MagicMock()
+        module.check_mode = False
+        module._diff = False
+        module.params = {
+            "validate": validate_cmd,
+            "backup": False,
+            "makedirs": False,
+            "allow_unsafe_deletes": False,
+        }
+        module.run_command.return_value = (1, "", "error output")
+
+        # Capture fail_json call arguments
+        fail_kwargs: dict[str, Any] = {}
+
+        def mock_fail_json(**kwargs: Any) -> None:
+            fail_kwargs.update(kwargs)
+            raise AnsibleFailJson(kwargs)
+
+        module.fail_json.side_effect = mock_fail_json
+
+        fsb = FSBuilder(module)
+
+        import tempfile
+
+        fd, tmp_file = tempfile.mkstemp(dir=str(tmp_path))
+        os.close(fd)
+
+        with pytest.raises(AnsibleFailJson):
+            fsb._validate_file(tmp_file, validate_cmd)
+
+        # The msg field should be generic
+        assert sys.executable not in fail_kwargs["msg"]
+        assert "exit code" in fail_kwargs["msg"].lower()
+        # The validate_cmd is in a separate key for debugging
+        assert "validate_cmd" in fail_kwargs
+
+    def test_validate_missing_percent_s_no_leak(self, patch_module: None, tmp_path: Any) -> None:
+        """Missing %s error should not expose the command template."""
+        from plugins.modules.fsbuilder import FSBuilder
+
+        module = MagicMock()
+        module.params = {"allow_unsafe_deletes": False}
+
+        fail_kwargs: dict[str, Any] = {}
+
+        def mock_fail_json(**kwargs: Any) -> None:
+            fail_kwargs.update(kwargs)
+            raise AnsibleFailJson(kwargs)
+
+        module.fail_json.side_effect = mock_fail_json
+
+        fsb = FSBuilder(module)
+
+        with pytest.raises(AnsibleFailJson):
+            fsb._validate_file("/tmp/fake", f"{sys.executable} -c pass")
+
+        # Should mention %s but not expose the full command
+        assert "%s" in fail_kwargs["msg"]
+        assert sys.executable not in fail_kwargs["msg"]

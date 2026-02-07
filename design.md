@@ -255,7 +255,6 @@ filesystem operations.
     return `changed=False` with a "not implemented" message
   - Result aggregation logic: build `items` list, compute `changed_count`,
     `ok_count`, `skipped_count`, `failed_count`
-  - `on_error` handling: `fail` (immediate) vs `continue` (accumulate)
 - [X] Create `plugins/action/fsbuilder.py` as a pass-through stub:
   - Subclass `ActionBase`, set `TRANSFERS_FILES = True`
   - `run()` method that calls `self._execute_module()` with unmodified args
@@ -657,8 +656,6 @@ diff mode, idempotency, and error handling.
 - [X] Test check mode
 
 ##### Cross-cutting concerns
-- [ ] Test `on_error=fail` stops on first error
-- [ ] Test `on_error=continue` processes all items, reports failures
 - [X] Test `creates` skips item when path exists
 - [X] Test `removes` skips item when path does not exist
 - [X] Test `makedirs=True` across multiple state handlers
@@ -781,13 +778,10 @@ result.
 - [ ] converge.yml:
   - Test `validate` failure: write invalid content with a validate command
     that rejects it (use `ignore_errors: true`)
-  - Test `on_error: continue`: include a failing item followed by a
-    succeeding item
   - Test mutual exclusion: `src` + `content` together
   - Test `creates` / `removes` conditionals
 - [ ] verify.yml confirms:
   - Validation failure left original file intact
-  - `on_error: continue` processed all items (good item succeeded)
   - Error results have correct `failed_count`
 
 #### Scenario: `lineinfile_blockinfile`

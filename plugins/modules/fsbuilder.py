@@ -92,11 +92,14 @@ options:
   removes:
     description: Skip this item if the specified path does not exist.
     type: path
-  on_error:
-    description: Error handling strategy.
-    type: str
-    default: fail
-    choices: [fail, continue]
+  allow_unsafe_deletes:
+    description:
+      - When true, disables safety checks that prevent deletion of critical
+        system paths (C(/), C(/etc), C(/usr), etc.) with state=absent.
+      - Use with extreme caution. This is a safety override for rare cases
+        where you genuinely need to remove a protected path.
+    type: bool
+    default: false
   line:
     description: For state=lineinfile, the line to ensure present/absent.
     type: str
@@ -274,6 +277,7 @@ import contextlib  # noqa: E402
 import glob  # noqa: E402
 import os  # noqa: E402
 import re  # noqa: E402
+import shlex  # noqa: E402
 import shutil  # noqa: E402
 import tempfile  # noqa: E402
 import time  # noqa: E402
@@ -321,11 +325,7 @@ def build_argument_spec() -> dict[str, Any]:
         "modification_time": {"type": "str"},
         "creates": {"type": "path"},
         "removes": {"type": "path"},
-        "on_error": {
-            "type": "str",
-            "default": "fail",
-            "choices": ["fail", "continue"],
-        },
+        "allow_unsafe_deletes": {"type": "bool", "default": False},
         # lineinfile parameters
         "line": {"type": "str"},
         "regexp": {"type": "str"},
@@ -373,6 +373,31 @@ class FSBuilder:
         "lineinfile": "_handle_lineinfile",
         "blockinfile": "_handle_blockinfile",
     }
+
+    # AIDEV-NOTE: SECURITY: Protected system paths that state=absent will refuse
+    # to delete unless allow_unsafe_deletes=True. This prevents accidental
+    # deletion of critical OS directories via misconfigured playbooks.
+    PROTECTED_PATHS: frozenset[str] = frozenset(
+        {
+            "/boot",
+            "/dev",
+            "/proc",
+            "/sys",
+            "/etc",
+            "/usr",
+            "/lib",
+            "/lib64",
+            "/sbin",
+            "/bin",
+            "/var",
+            "/home",
+            "/root",
+            "/run",
+            "/tmp",
+            "/opt",
+            "/srv",
+        }
+    )
 
     def __init__(self, module: AnsibleModule) -> None:
         self.module = module
@@ -456,6 +481,10 @@ class FSBuilder:
             return False
 
         parent = os.path.dirname(path)
+        # AIDEV-NOTE: os.path.dirname("filename") returns "" for bare names;
+        # nothing to create in that case.
+        if not parent:
+            return False
         if os.path.isdir(parent):
             return False
 
@@ -474,18 +503,23 @@ class FSBuilder:
         return True
 
     def _validate_file(self, tmp_path: str, validate_cmd: str) -> None:
-        """Run a validation command against a temp file. Fails module on error."""
-        if "%s" not in validate_cmd:
-            self.module.fail_json(msg=f"validate command must contain %s: {validate_cmd}")
+        """Run a validation command against a temp file. Fails module on error.
 
-        cmd = validate_cmd % tmp_path
+        AIDEV-NOTE: We quote tmp_path with shlex.quote to prevent command injection,
+        and use generic error messages to avoid leaking file paths or command text.
+        """
+        if "%s" not in validate_cmd:
+            self.module.fail_json(msg="validate command must contain %s")
+
+        cmd = validate_cmd % shlex.quote(tmp_path)
         rc, stdout, stderr = self.module.run_command(cmd)
         if rc != 0:
             # Clean up temp file before failing
             with contextlib.suppress(OSError):
                 os.unlink(tmp_path)
             self.module.fail_json(
-                msg=f"Validation failed: {cmd}",
+                msg=f"Validation command failed (exit code {rc})",
+                validate_cmd=validate_cmd,
                 rc=rc,
                 stdout=stdout,
                 stderr=stderr,
@@ -715,6 +749,9 @@ class FSBuilder:
     def _handle_directory(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle state: directory."""
         dest = params["dest"].rstrip("/")
+        # AIDEV-NOTE: Prevent "/" from becoming empty string after rstrip
+        if not dest:
+            dest = "/"
         result: dict[str, Any] = {"changed": False, "dest": dest, "state": "directory"}
 
         self._makedirs(dest, params)
@@ -844,16 +881,69 @@ class FSBuilder:
         self.module.fail_json(msg=f"Cannot parse time value: {time_str}")
         return None  # unreachable
 
+    def _validate_safe_path(self, path: str) -> None:
+        """Reject deletion of root or critical system paths.
+
+        AIDEV-NOTE: SECURITY: This is the primary safety guard against
+        accidental `shutil.rmtree("/")` or deletion of /etc, /usr, etc.
+        Bypassed only when allow_unsafe_deletes=True.
+        """
+        if self.module.params.get("allow_unsafe_deletes"):
+            return
+        if not path:
+            self.module.fail_json(
+                msg="Refusing to delete empty path. Set allow_unsafe_deletes=true to override.",
+                dest=path,
+                state="absent",
+            )
+        real = os.path.realpath(path)
+        if real == "/":
+            self.module.fail_json(
+                msg="Refusing to delete root filesystem '/'."
+                " Set allow_unsafe_deletes=true to override.",
+                dest=path,
+                state="absent",
+            )
+        if real in self.PROTECTED_PATHS:
+            self.module.fail_json(
+                msg=f"Refusing to delete protected system path '{real}'."
+                " Set allow_unsafe_deletes=true to override.",
+                dest=path,
+                state="absent",
+            )
+
+    def _validate_safe_glob_pattern(self, pattern: str) -> None:
+        """Reject glob patterns that could match critical system paths.
+
+        AIDEV-NOTE: SECURITY: Rejects patterns like /* or /? that are rooted
+        at / and could match protected paths.
+        """
+        if self.module.params.get("allow_unsafe_deletes"):
+            return
+        # Check if the directory portion of the glob is exactly "/"
+        parent = os.path.dirname(pattern)
+        if parent == "/":
+            self.module.fail_json(
+                msg=f"Refusing to use glob pattern rooted at '/': {pattern}."
+                " Set allow_unsafe_deletes=true to override.",
+                dest=pattern,
+                state="absent",
+            )
+
     def _handle_absent(self, params: dict[str, Any]) -> dict[str, Any]:
         """Handle state: absent - remove file/directory, supports globs."""
         dest = params["dest"]
         result: dict[str, Any] = {"changed": False, "dest": dest, "state": "absent"}
+
+        # Safety guard: reject dangerous paths
+        self._validate_safe_path(dest)
 
         basename = os.path.basename(dest)
         # Check for glob characters
         has_glob = any(c in basename for c in ("*", "?", "["))
 
         if has_glob:
+            self._validate_safe_glob_pattern(dest)
             matches = glob.glob(dest)
             if not matches:
                 result["msg"] = "no paths matched glob pattern"
@@ -874,6 +964,7 @@ class FSBuilder:
                 return result
 
             for path in matches:
+                self._validate_safe_path(path)
                 if os.path.isdir(path) and not os.path.islink(path):
                     shutil.rmtree(path)
                 else:
@@ -977,15 +1068,15 @@ class FSBuilder:
 
         self._makedirs(dest, params)
 
-        # Check if dest exists and is already a hard link to src
-        if (
-            os.path.exists(dest)
-            and os.path.exists(src)
-            and os.stat(dest).st_ino == os.stat(src).st_ino
-        ):
-            result["changed"] = self._apply_attributes(dest, params, False)
-            result["msg"] = "hard link already correct"
-            return result
+        # AIDEV-NOTE: Compare both st_dev and st_ino for hard link identity.
+        # Inode numbers are only unique within a filesystem (device).
+        if os.path.exists(dest) and os.path.exists(src):
+            dest_stat = os.stat(dest)
+            src_stat = os.stat(src)
+            if dest_stat.st_dev == src_stat.st_dev and dest_stat.st_ino == src_stat.st_ino:
+                result["changed"] = self._apply_attributes(dest, params, False)
+                result["msg"] = "hard link already correct"
+                return result
 
         if os.path.exists(dest) or os.path.islink(dest):
             if not params.get("force"):

@@ -1,6 +1,6 @@
 ---
 # Demonstrates per-item when conditions, creates/removes guards,
-# per-item notify, and on_error handling
+# and per-item notify handling
 - name: Conditional deployment with error handling
   hosts: all
   become: true
@@ -63,12 +63,11 @@
           state: absent
           removes: /tmp/{{ app_name }}-install
 
-    - name: Deploy with error tolerance (continue on failure)
+    - name: Deploy with validation and backup
       linsomniac.fsbuilder.fsbuilder:
         owner: root
         group: root
         mode: "0644"
-        on_error: continue
       loop:
         # If one config validation fails, the rest still get deployed
         - dest: /etc/{{ app_name }}/app.conf

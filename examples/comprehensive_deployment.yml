@@ -32,7 +32,6 @@
         owner: root
         group: "{{ app_group }}"
         mode: "0644"
-        on_error: continue
       loop:
         #
         # --- Directories ---

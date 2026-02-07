@@ -189,12 +189,6 @@ These parameters apply when `state: template` is used:
 |-----------|---------|-------------|
 | `notify` | - | Handler to notify if the item changed (passed through loop items). |
 
-#### Error Handling
-
-| Parameter | Default | Description |
-|-----------|---------|-------------|
-| `on_error` | `fail` | Controls behavior when a single item fails. `fail` (default): the entire task fails immediately. `continue`: the failing item is recorded as failed but processing continues with the remaining items. A summary of failures is reported at the end, and the task is marked failed if any item failed. |
-
 ### Line/Block Editing
 
 #### `state: lineinfile`
@@ -419,10 +413,6 @@ The module returns structured data describing all operations performed:
 }
 ```
 
-When `on_error: continue` is used, failed items include an `error` field with
-the failure message, and the task-level result is marked `failed: true` if any
-item failed.
-
 ## Comprehensive Example
 
 ```yaml
@@ -431,7 +421,6 @@ item failed.
     owner: root
     group: myapp
     mode: "0644"
-    on_error: continue
   loop:
     # Create directories (makedirs handles parents automatically)
     - dest: /etc/myapp/conf.d

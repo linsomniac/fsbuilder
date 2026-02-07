@@ -317,6 +317,10 @@ class ActionModule(ActionBase):
 
         return args
 
+    # AIDEV-NOTE: SECURITY: Per-item 'when' values are treated as trusted input,
+    # consistent with Ansible's native task-level 'when'. They have full access
+    # to task_vars via the Templar. Ansible playbooks are trusted code -- there
+    # is no sandboxing or input sanitization layer.
     def _evaluate_when(self, when_expr: bool | str | list[str], task_vars: dict[str, Any]) -> bool:
         """Evaluate a per-item 'when' condition.
 
