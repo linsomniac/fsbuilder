@@ -570,8 +570,8 @@ diff mode, idempotency, and error handling.
 ##### State: directory
 - [X] Test create new directory
 - [X] Test existing directory is idempotent (no change)
-- [ ] Test directory with mode/owner/group
-- [ ] Test `recurse=True` applies attributes recursively
+- [X] Test directory with mode/owner/group
+- [X] Test `recurse=True` applies attributes recursively
 - [X] Test `makedirs=True` creates parent directories
 - [X] Test `force=True` replaces file with directory
 - [X] Test `force_backup=True` renames existing file to `.old`
@@ -619,27 +619,27 @@ diff mode, idempotency, and error handling.
 - [X] Test `validate` success allows write
 - [X] Test `validate` failure prevents write and fails
 - [X] Test `validate` command without `%s` fails
-- [ ] Test atomic write (temp file in same directory)
+- [X] Test atomic write (temp file in same directory)
 - [X] Test diff mode shows before/after
 - [X] Test check mode does not write
-- [ ] Test binary file detection suppresses diff
+- [X] Test binary file detection suppresses diff
 
 ##### State: copy (src-based, remote)
 - [X] Test copies from `src` to `dest` on remote
 - [X] Test idempotent when content matches
-- [ ] Test `remote_src=True` copies from remote path
+- [X] Test `remote_src=True` copies from remote path
 
 ##### State: lineinfile
 - [X] Test add line to end of file (default insertafter=EOF)
 - [X] Test replace line matching regexp
 - [X] Test regexp match but line already correct (idempotent)
 - [X] Test insertafter regex positioning
-- [ ] Test insertbefore regex positioning
+- [X] Test insertbefore regex positioning
 - [X] Test insertbefore=BOF
 - [X] Test `line_state=absent` removes matching lines
 - [X] Test `line_state=absent` with regexp removes all matches
 - [X] Test file does not exist: creates with line
-- [ ] Test validate integration
+- [X] Test validate integration
 - [X] Test diff mode
 - [X] Test check mode
 
@@ -649,9 +649,9 @@ diff mode, idempotency, and error handling.
 - [X] Test existing block with same content is idempotent
 - [X] Test custom markers and marker_begin/marker_end
 - [X] Test `block_state=absent` removes marked block
-- [ ] Test insertafter/insertbefore positioning
+- [X] Test insertafter/insertbefore positioning
 - [X] Test file does not exist: creates with block
-- [ ] Test validate integration
+- [X] Test validate integration
 - [X] Test diff mode
 - [X] Test check mode
 
@@ -664,7 +664,7 @@ diff mode, idempotency, and error handling.
       skipped_count, failed_count
 - [X] Test `content` and `src` mutual exclusion produces clear error
 - [X] Test `insertafter` and `insertbefore` mutual exclusion
-- [ ] Test `validate` ignored with warning for non-file states
+- [X] Test `validate` ignored with warning for non-file states
 - [X] Test `lineinfile` without `line` when `line_state=present` fails
 - [X] Test `blockinfile` without `block` when `block_state=present` fails
 
@@ -684,7 +684,7 @@ diff mode, idempotency, and error handling.
 - [X] Test rendered content injected, state changed to `copy`
 - [X] Test inline content template rendering
 - [X] Test `content` + `src` together raises error
-- [ ] Test template rendering options: `trim_blocks`, `lstrip_blocks`,
+- [X] Test template rendering options: `trim_blocks`, `lstrip_blocks`,
       `newline_sequence`, `output_encoding`
 - [X] Test `dest` ending in `/` appends src basename (minus `.j2`)
 
@@ -709,8 +709,8 @@ diff mode, idempotency, and error handling.
 
 #### Test Execution
 - [X] All unit tests pass: `pytest tests/unit/ -v`
-- [ ] Coverage report: `pytest tests/unit/ --cov=plugins --cov-report=html`
-- [ ] Target >= 90% line coverage for module, >= 80% for action plugin
+- [X] Coverage report: `pytest tests/unit/ --cov=plugins --cov-report=term-missing`
+- [X] Target >= 90% line coverage for module, >= 80% for action plugin
 - [X] Run `ruff format`, `ruff check`, and `mypy`
 
 ---

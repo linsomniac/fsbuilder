@@ -1867,3 +1867,555 @@ class TestValidateInfoLeakage:
         # Should mention %s but not expose the full command
         assert "%s" in fail_kwargs["msg"]
         assert sys.executable not in fail_kwargs["msg"]
+
+
+# =============================================================================
+# Phase 6: Remaining unchecked tests
+# =============================================================================
+
+
+class TestDirectoryModeOwnerGroup:
+    """Tests for directory with mode/owner/group and recurse."""
+
+    def test_directory_with_mode(self, patch_module: None, tmp_path: Any) -> None:
+        """Test directory creation applies mode via set_fs_attributes_if_different."""
+        from plugins.modules.fsbuilder import FSBuilder
+
+        dest = str(tmp_path / "modedir")
+
+        module = MagicMock()
+        module.check_mode = False
+        module._diff = False
+        module.params = {
+            "dest": dest,
+            "state": "directory",
+            "mode": "0755",
+            "force": False,
+            "force_backup": False,
+            "makedirs": False,
+            "recurse": False,
+            "creates": None,
+            "removes": None,
+            "validate": None,
+            "allow_unsafe_deletes": False,
+        }
+        module.load_file_common_arguments.return_value = {"path": dest, "mode": "0755"}
+        module.set_fs_attributes_if_different.return_value = True
+
+        fsb = FSBuilder(module)
+        os.makedirs(dest)
+        fsb._handle_directory(module.params)
+
+        # set_fs_attributes_if_different should have been called
+        module.set_fs_attributes_if_different.assert_called_once()
+        call_args = module.set_fs_attributes_if_different.call_args
+        assert call_args[0][0]["path"] == dest
+
+    def test_recurse_applies_attributes_to_children(
+        self, patch_module: None, tmp_path: Any
+    ) -> None:
+        """recurse=True applies attributes to all children."""
+        from plugins.modules.fsbuilder import FSBuilder
+
+        dest = str(tmp_path / "recursedir")
+        os.makedirs(os.path.join(dest, "subdir"))
+        with open(os.path.join(dest, "file1.txt"), "w") as f:
+            f.write("content")
+        with open(os.path.join(dest, "subdir", "file2.txt"), "w") as f:
+            f.write("content2")
+
+        module = MagicMock()
+        module.check_mode = False
+        module._diff = False
+        module.params = {
+            "dest": dest,
+            "state": "directory",
+            "mode": "0755",
+            "owner": "root",
+            "group": "root",
+            "force": False,
+            "force_backup": False,
+            "makedirs": False,
+            "recurse": True,
+            "creates": None,
+            "removes": None,
+            "validate": None,
+            "allow_unsafe_deletes": False,
+        }
+        module.load_file_common_arguments.return_value = {"path": dest, "mode": "0755"}
+        module.set_fs_attributes_if_different.return_value = False
+
+        fsb = FSBuilder(module)
+        fsb._handle_directory(module.params)
+
+        # Should have been called for: dest dir, subdir, file1.txt, file2.txt
+        assert module.set_fs_attributes_if_different.call_count >= 4
+
+
+class TestAtomicWrite:
+    """Tests for atomic write behavior (temp file in same directory)."""
+
+    def test_temp_file_created_in_dest_directory(self, patch_module: None, tmp_path: Any) -> None:
+        """Atomic write creates temp file in the same directory as dest."""
+        dest = str(tmp_path / "atomic_test.txt")
+        with (
+            set_module_args({"dest": dest, "state": "copy", "content": "atomic content\n"}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        # File should exist at dest
+        assert os.path.isfile(dest)
+        with open(dest) as f:
+            assert f.read() == "atomic content\n"
+        # No temp files should be left behind in the directory
+        remaining_files = os.listdir(str(tmp_path))
+        assert remaining_files == ["atomic_test.txt"]
+
+
+class TestBinaryDiffSuppression:
+    """Tests for binary file detection suppressing diff."""
+
+    def test_binary_file_diff_handled_gracefully(self, patch_module: None, tmp_path: Any) -> None:
+        """Binary content in existing file is handled gracefully in diff mode."""
+        dest = str(tmp_path / "binary_test.bin")
+        # Write binary content with null bytes
+        with open(dest, "wb") as f:
+            f.write(b"\x00\x01\x02\xff\xfe\xfd")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "copy",
+                    "content": "new text content\n",
+                    "_ansible_diff": True,
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        # Diff should be present and not crash, even with binary before content
+        assert "diff" in result
+
+    def test_binary_src_diff_handled(self, patch_module: None, tmp_path: Any) -> None:
+        """Binary source file diff is handled gracefully."""
+        src = str(tmp_path / "binary_src.bin")
+        dest = str(tmp_path / "binary_dest.bin")
+
+        # Write binary content to both
+        with open(src, "wb") as f:
+            f.write(b"\x00\x01\x02\x03new binary")
+        with open(dest, "wb") as f:
+            f.write(b"\xff\xfe\xfd\xfcold binary")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "copy",
+                    "src": src,
+                    "_ansible_diff": True,
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        # Should not crash - diff should exist
+        assert "diff" in result
+
+
+class TestRemoteSrcCopy:
+    """Tests for remote_src=True copy operations."""
+
+    def test_remote_src_copies_from_remote_path(self, patch_module: None, tmp_path: Any) -> None:
+        """remote_src=True copies from a path on the remote host."""
+        src = str(tmp_path / "remote_source.txt")
+        dest = str(tmp_path / "remote_dest.txt")
+        with open(src, "w") as f:
+            f.write("remote source content\n")
+
+        with (
+            set_module_args({"dest": dest, "state": "copy", "src": src, "remote_src": True}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        assert os.path.isfile(dest)
+        with open(dest) as f:
+            assert f.read() == "remote source content\n"
+        # Source should still exist
+        assert os.path.isfile(src)
+
+    def test_remote_src_idempotent(self, patch_module: None, tmp_path: Any) -> None:
+        """remote_src=True is idempotent when content matches."""
+        src = str(tmp_path / "remote_src2.txt")
+        dest = str(tmp_path / "remote_dest2.txt")
+        with open(src, "w") as f:
+            f.write("same content\n")
+        with open(dest, "w") as f:
+            f.write("same content\n")
+
+        with (
+            set_module_args({"dest": dest, "state": "copy", "src": src, "remote_src": True}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is False
+
+
+class TestLineinfileInsertbeforeRegex:
+    """Tests for lineinfile insertbefore with regex positioning."""
+
+    def test_insertbefore_regex_positions_correctly(
+        self, patch_module: None, tmp_path: Any
+    ) -> None:
+        """insertbefore with regex inserts before the matched line."""
+        dest = str(tmp_path / "before_regex.txt")
+        with open(dest, "w") as f:
+            f.write("[defaults]\nkey1=val1\n[section2]\nkey2=val2\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "lineinfile",
+                    "line": "key0=val0",
+                    "insertbefore": r"^\[section2\]",
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        with open(dest) as f:
+            lines = f.readlines()
+        # key0=val0 should appear before [section2]
+        key0_idx = None
+        section2_idx = None
+        for i, line in enumerate(lines):
+            if "key0=val0" in line:
+                key0_idx = i
+            if "[section2]" in line:
+                section2_idx = i
+        assert key0_idx is not None, "key0=val0 not found in output"
+        assert section2_idx is not None, "[section2] not found in output"
+        assert key0_idx < section2_idx, "key0=val0 should be before [section2]"
+
+    def test_insertbefore_no_match_appends(self, patch_module: None, tmp_path: Any) -> None:
+        """insertbefore with no matching regex appends to EOF."""
+        dest = str(tmp_path / "before_nomatch.txt")
+        with open(dest, "w") as f:
+            f.write("line1\nline2\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "lineinfile",
+                    "line": "new_line",
+                    "insertbefore": "^NONEXISTENT",
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        with open(dest) as f:
+            lines = f.readlines()
+        # Should be appended at end
+        assert lines[-1].strip() == "new_line"
+
+
+class TestLineinfileValidate:
+    """Tests for lineinfile with validate integration."""
+
+    def test_lineinfile_validate_success(self, patch_module: None, tmp_path: Any) -> None:
+        """lineinfile with successful validate writes the file."""
+        dest = str(tmp_path / "validated_line.txt")
+        with open(dest, "w") as f:
+            f.write("existing\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "lineinfile",
+                    "line": "new_line",
+                    "validate": f"{sys.executable} -c 'import sys; sys.exit(0)' %s",
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        with open(dest) as f:
+            content = f.read()
+        assert "new_line" in content
+
+    def test_lineinfile_validate_failure(self, patch_module: None, tmp_path: Any) -> None:
+        """lineinfile with failing validate prevents write."""
+        dest = str(tmp_path / "invalid_line.txt")
+        with open(dest, "w") as f:
+            f.write("original\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "lineinfile",
+                    "line": "bad_line",
+                    "validate": f"{sys.executable} -c 'import sys; sys.exit(1)' %s",
+                }
+            ),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "validation command failed" in exc_info.value.kwargs["msg"].lower()
+        with open(dest) as f:
+            content = f.read()
+        assert "bad_line" not in content
+        assert "original" in content
+
+
+class TestBlockinfilePositioning:
+    """Tests for blockinfile insertafter/insertbefore positioning."""
+
+    def test_blockinfile_insertafter_regex(self, patch_module: None, tmp_path: Any) -> None:
+        """blockinfile insertafter with regex positions block correctly."""
+        dest = str(tmp_path / "block_after.txt")
+        with open(dest, "w") as f:
+            f.write("[section1]\nkey1=val1\n[section2]\nkey2=val2\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "blockinfile",
+                    "block": "inserted_key=inserted_val",
+                    "insertafter": r"^\[section1\]",
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        with open(dest) as f:
+            lines = f.readlines()
+        # Find positions
+        section1_idx = None
+        begin_idx = None
+        section2_idx = None
+        for i, line in enumerate(lines):
+            if "[section1]" in line:
+                section1_idx = i
+            if "# BEGIN MANAGED BLOCK" in line:
+                begin_idx = i
+            if "[section2]" in line:
+                section2_idx = i
+        assert section1_idx is not None
+        assert begin_idx is not None
+        assert section2_idx is not None
+        assert section1_idx < begin_idx < section2_idx
+
+    def test_blockinfile_insertbefore_regex(self, patch_module: None, tmp_path: Any) -> None:
+        """blockinfile insertbefore with regex positions block correctly."""
+        dest = str(tmp_path / "block_before.txt")
+        with open(dest, "w") as f:
+            f.write("[section1]\nkey1=val1\n[section2]\nkey2=val2\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "blockinfile",
+                    "block": "before_block_content",
+                    "insertbefore": r"^\[section2\]",
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        with open(dest) as f:
+            lines = f.readlines()
+        # Block should appear before [section2]
+        end_idx = None
+        section2_idx = None
+        for i, line in enumerate(lines):
+            if "# END MANAGED BLOCK" in line:
+                end_idx = i
+            if "[section2]" in line:
+                section2_idx = i
+        assert end_idx is not None
+        assert section2_idx is not None
+        assert end_idx < section2_idx
+
+    def test_blockinfile_insertbefore_bof(self, patch_module: None, tmp_path: Any) -> None:
+        """blockinfile insertbefore=BOF positions block at beginning."""
+        dest = str(tmp_path / "block_bof.txt")
+        with open(dest, "w") as f:
+            f.write("existing line 1\nexisting line 2\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "blockinfile",
+                    "block": "bof block content",
+                    "insertbefore": "BOF",
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        with open(dest) as f:
+            lines = f.readlines()
+        assert "# BEGIN MANAGED BLOCK" in lines[0]
+
+
+class TestBlockinfileValidate:
+    """Tests for blockinfile with validate integration."""
+
+    def test_blockinfile_validate_success(self, patch_module: None, tmp_path: Any) -> None:
+        """blockinfile with successful validate writes the file."""
+        dest = str(tmp_path / "validated_block.txt")
+        with open(dest, "w") as f:
+            f.write("existing\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "blockinfile",
+                    "block": "valid block content",
+                    "validate": f"{sys.executable} -c 'import sys; sys.exit(0)' %s",
+                }
+            ),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        with open(dest) as f:
+            content = f.read()
+        assert "valid block content" in content
+
+    def test_blockinfile_validate_failure(self, patch_module: None, tmp_path: Any) -> None:
+        """blockinfile with failing validate prevents write."""
+        dest = str(tmp_path / "invalid_block.txt")
+        with open(dest, "w") as f:
+            f.write("original content\n")
+
+        with (
+            set_module_args(
+                {
+                    "dest": dest,
+                    "state": "blockinfile",
+                    "block": "bad block",
+                    "validate": f"{sys.executable} -c 'import sys; sys.exit(1)' %s",
+                }
+            ),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "validation command failed" in exc_info.value.kwargs["msg"].lower()
+        with open(dest) as f:
+            content = f.read()
+        assert "bad block" not in content
+        assert "original content" in content
+
+
+class TestValidateIgnoredForNonFileStates:
+    """Tests for validate being ignored with warning for non-file states."""
+
+    def test_validate_ignored_for_directory(self, patch_module: None, tmp_path: Any) -> None:
+        """validate is ignored with warning for state=directory."""
+        dest = str(tmp_path / "validate_dir")
+        with (
+            set_module_args({"dest": dest, "state": "directory", "validate": "some_cmd %s"}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        assert os.path.isdir(dest)
+
+    def test_validate_ignored_for_absent(self, patch_module: None, tmp_path: Any) -> None:
+        """validate is ignored with warning for state=absent."""
+        dest = str(tmp_path / "validate_absent.txt")
+        with open(dest, "w") as f:
+            f.write("delete me")
+
+        with (
+            set_module_args({"dest": dest, "state": "absent", "validate": "some_cmd %s"}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        assert not os.path.exists(dest)
+
+    def test_validate_ignored_for_link(self, patch_module: None, tmp_path: Any) -> None:
+        """validate is ignored with warning for state=link."""
+        src = str(tmp_path / "link_target.txt")
+        dest = str(tmp_path / "validate_link")
+        with open(src, "w") as f:
+            f.write("target")
+
+        with (
+            set_module_args({"dest": dest, "state": "link", "src": src, "validate": "some_cmd %s"}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        assert os.path.islink(dest)
+
+    def test_validate_ignored_for_hard(self, patch_module: None, tmp_path: Any) -> None:
+        """validate is ignored with warning for state=hard."""
+        src = str(tmp_path / "hard_target.txt")
+        dest = str(tmp_path / "validate_hard")
+        with open(src, "w") as f:
+            f.write("target")
+
+        with (
+            set_module_args({"dest": dest, "state": "hard", "src": src, "validate": "some_cmd %s"}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        assert os.path.isfile(dest)

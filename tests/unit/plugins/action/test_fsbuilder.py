@@ -557,3 +557,94 @@ class TestHandlerNotification:
 
         with pytest.raises(AnsibleError, match="notify.*must be a string or list"):
             action_module.run(task_vars={})
+
+
+class TestTemplateRenderingOptions:
+    """Test template rendering options are stripped before passing to module."""
+
+    def test_template_options_stripped_from_file_template(
+        self, action_module: ActionModule
+    ) -> None:
+        """Template rendering options are stripped from module args for file templates."""
+        action_module._templar.do_template.return_value = "rendered content"
+        action_module._find_needle = MagicMock(return_value="/path/to/templates/config.j2")
+        action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
+
+        mock_file = MagicMock()
+        mock_file.read.return_value = "template {{ var }}"
+        mock_file.__enter__ = MagicMock(return_value=mock_file)
+        mock_file.__exit__ = MagicMock(return_value=False)
+
+        from unittest.mock import patch
+
+        with patch("builtins.open", return_value=mock_file):
+            args = {
+                "dest": "/etc/myapp/config",
+                "state": "template",
+                "trim_blocks": True,
+                "lstrip_blocks": True,
+                "newline_sequence": "\r\n",
+                "output_encoding": "utf-8",
+            }
+            result = action_module._process_template_file(args, {}, args["dest"], None)
+
+        # Template-specific options should be stripped
+        assert "trim_blocks" not in result
+        assert "lstrip_blocks" not in result
+        assert "newline_sequence" not in result
+        assert "output_encoding" not in result
+        # Content should be injected and state changed to copy
+        assert result["state"] == "copy"
+        assert result["content"] == "rendered content"
+
+    def test_template_options_stripped_from_inline_template(
+        self, action_module: ActionModule
+    ) -> None:
+        """Template rendering options are stripped from module args for inline templates."""
+        action_module._templar.do_template.return_value = "rendered inline"
+
+        args = {
+            "dest": "/etc/myapp/version.txt",
+            "state": "template",
+            "content": "version={{ app_version }}",
+            "trim_blocks": False,
+            "lstrip_blocks": False,
+            "newline_sequence": "\n",
+            "output_encoding": "utf-8",
+        }
+        result = action_module._process_template_content(args, {"app_version": "1.0"})
+
+        # Template-specific options should be stripped
+        assert "trim_blocks" not in result
+        assert "lstrip_blocks" not in result
+        assert "newline_sequence" not in result
+        assert "output_encoding" not in result
+        assert result["state"] == "copy"
+        assert result["content"] == "rendered inline"
+
+    def test_template_options_do_not_break_run(self, action_module: ActionModule) -> None:
+        """Template options in task args don't cause errors during run()."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "template",
+            "content": "{{ var }}",
+            "trim_blocks": True,
+            "lstrip_blocks": True,
+            "newline_sequence": "\n",
+            "output_encoding": "utf-8",
+        }
+        action_module._task.loop = None
+        action_module._templar.do_template.return_value = "rendered"
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        result = action_module.run(task_vars={"var": "value"})
+
+        # Should succeed without errors
+        assert result == {"changed": True}
+        # Module should NOT receive template-specific args
+        call_args = action_module._execute_module.call_args
+        module_args = call_args.kwargs["module_args"]
+        assert "trim_blocks" not in module_args
+        assert "lstrip_blocks" not in module_args
+        assert "newline_sequence" not in module_args
+        assert "output_encoding" not in module_args
