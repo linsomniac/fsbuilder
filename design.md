@@ -829,8 +829,8 @@ result.
   - Lint: `ruff check`, `ruff format --check`
   - Type check: `mypy`
   - Unit tests: `pytest tests/unit/ -v --cov`
-  - Molecule tests: run all scenarios
-  - Matrix: test against ansible-core 2.15, 2.16, 2.17 (if released)
+  - Molecule tests: deferred until Phase 7 Molecule scenarios are implemented
+  - Matrix: test against ansible-core 2.15, 2.16, 2.17
 - [X] Create `Makefile` or `justfile` with convenience targets:
   - `make lint`, `make test-unit`, `make test-integration`, `make test-all`
 

@@ -7,15 +7,20 @@ on:
   pull_request:
     branches: [main, master]
 
+permissions:
+  contents: read
+
 jobs:
   lint:
     name: Lint & Type Check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
 
       - name: Set up Python
         run: uv python install 3.13
@@ -44,18 +49,25 @@ jobs:
           # ansible-core 2.15 doesn't support Python 3.13
           - python-version: "3.13"
             ansible-version: "2.15"
-    # AIDEV-NOTE: ANSIBLE_LOCAL_TEMP/ANSIBLE_REMOTE_TEMP avoid permission issues in CI
+    # AIDEV-NOTE: ANSIBLE_LOCAL_TEMP/ANSIBLE_REMOTE_TEMP avoid permission issues in CI.
+    # UV_PYTHON ensures uv uses the matrix Python version, not the system default.
     env:
       ANSIBLE_LOCAL_TEMP: /tmp/ansible-local-tmp
       ANSIBLE_REMOTE_TEMP: /tmp/ansible-remote-tmp
+      UV_PYTHON: ${{ matrix.python-version }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
 
       - name: Set up Python ${{ matrix.python-version }}
         run: uv python install ${{ matrix.python-version }}
+
+      - name: Verify Python version
+        run: uv run python -V
 
       - name: Install dependencies with ansible-core ${{ matrix.ansible-version }}
         run: |
@@ -69,10 +81,12 @@ jobs:
     name: Collection Build & Install
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v4
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
 
       - name: Set up Python
         run: uv python install 3.13
@@ -88,5 +102,6 @@ jobs:
 
       - name: Verify FQCN resolves
         run: |
+          set -euo pipefail
           ANSIBLE_COLLECTIONS_PATH=./test-collections \
             uv run ansible-doc linsomniac.fsbuilder.fsbuilder --type module | head -5
