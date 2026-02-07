@@ -23,6 +23,7 @@ AIDEV-NOTE: Phase 6 comprehensive test suite covers:
 from __future__ import annotations
 
 import os
+import sys
 from typing import Any
 
 import pytest
@@ -193,7 +194,7 @@ class TestModuleSkeleton:
         ):
             fsbuilder_main()
 
-        assert "mutually exclusive" in str(exc_info.value).lower()
+        assert "mutually exclusive" in exc_info.value.kwargs["msg"].lower()
 
     def test_creates_skips_when_exists(self, patch_module: None, tmp_path: Any) -> None:
         """Test that 'creates' parameter skips when path exists."""
@@ -341,8 +342,7 @@ class TestCopyFromSrc:
         ):
             fsbuilder_main()
 
-        result_msg = str(exc_info.value).lower()
-        assert "not a regular file" in result_msg
+        assert "not a regular file" in exc_info.value.kwargs["msg"].lower()
 
     def test_copy_src_dest_is_directory_fails(self, patch_module: None, tmp_path: Any) -> None:
         """Test that copy with src fails when dest is a directory (no force)."""
@@ -358,8 +358,7 @@ class TestCopyFromSrc:
         ):
             fsbuilder_main()
 
-        result_msg = str(exc_info.value).lower()
-        assert "not a regular file" in result_msg
+        assert "not a regular file" in exc_info.value.kwargs["msg"].lower()
 
 
 # =============================================================================
@@ -753,7 +752,7 @@ class TestCopyAdvanced:
                     "dest": dest,
                     "state": "copy",
                     "content": "valid content\n",
-                    "validate": "/bin/true %s",
+                    "validate": f"{sys.executable} -c 'import sys; sys.exit(0)' %s",
                 }
             ),
             pytest.raises(AnsibleExitJson) as exc_info,
@@ -774,14 +773,14 @@ class TestCopyAdvanced:
                     "dest": dest,
                     "state": "copy",
                     "content": "bad content\n",
-                    "validate": "/bin/false %s",
+                    "validate": f"{sys.executable} -c 'import sys; sys.exit(1)' %s",
                 }
             ),
             pytest.raises(AnsibleFailJson) as exc_info,
         ):
             fsbuilder_main()
 
-        assert "validation failed" in str(exc_info.value).lower()
+        assert "validation failed" in exc_info.value.kwargs["msg"].lower()
         assert not os.path.exists(dest)
 
     def test_validate_without_percent_s_fails(self, patch_module: None, tmp_path: Any) -> None:
@@ -793,14 +792,14 @@ class TestCopyAdvanced:
                     "dest": dest,
                     "state": "copy",
                     "content": "content\n",
-                    "validate": "/bin/true",
+                    "validate": f"{sys.executable} -c pass",
                 }
             ),
             pytest.raises(AnsibleFailJson) as exc_info,
         ):
             fsbuilder_main()
 
-        assert "%s" in str(exc_info.value)
+        assert "%s" in exc_info.value.kwargs["msg"]
 
     def test_copy_new_file_from_src(self, patch_module: None, tmp_path: Any) -> None:
         """Copy from src to non-existent dest creates new file."""
@@ -947,10 +946,13 @@ class TestLineinfileAdvanced:
         with open(dest) as f:
             lines = f.readlines()
         # Find key1b - should be right after key1=val1
+        found = False
         for i, line in enumerate(lines):
             if "key1=" in line and "key1b" not in line:
                 assert "key1b" in lines[i + 1]
+                found = True
                 break
+        assert found, "Anchor line 'key1=' not found in output"
 
     def test_line_state_absent_removes_line(self, patch_module: None, tmp_path: Any) -> None:
         """line_state=absent removes matching lines."""
@@ -1412,6 +1414,14 @@ class TestTouchAdvanced:
 
         result = extract_result(exc_info.value)
         assert result["changed"] is True
+        # Verify timestamps were actually parsed and applied
+        stat = os.stat(dest)
+        from datetime import datetime
+
+        expected_atime = datetime(2020, 1, 1, 0, 0, 0).timestamp()
+        expected_mtime = datetime(2020, 6, 15, 12, 30, 0).timestamp()
+        assert abs(stat.st_atime - expected_atime) < 1
+        assert abs(stat.st_mtime - expected_mtime) < 1
 
 
 class TestCrossCutting:
@@ -1439,7 +1449,7 @@ class TestCrossCutting:
         ):
             fsbuilder_main()
 
-        assert "mutually exclusive" in str(exc_info.value).lower()
+        assert "mutually exclusive" in exc_info.value.kwargs["msg"].lower()
 
     def test_lineinfile_present_requires_line(self, patch_module: None, tmp_path: Any) -> None:
         """lineinfile with line_state=present requires line parameter."""
@@ -1453,7 +1463,7 @@ class TestCrossCutting:
         ):
             fsbuilder_main()
 
-        assert "line" in str(exc_info.value).lower()
+        assert "line" in exc_info.value.kwargs["msg"].lower()
 
     def test_blockinfile_present_requires_block(self, patch_module: None, tmp_path: Any) -> None:
         """blockinfile with block_state=present requires block parameter."""
@@ -1467,7 +1477,7 @@ class TestCrossCutting:
         ):
             fsbuilder_main()
 
-        assert "block" in str(exc_info.value).lower()
+        assert "block" in exc_info.value.kwargs["msg"].lower()
 
     def test_result_has_standard_keys(self, patch_module: None, tmp_path: Any) -> None:
         """Result dict contains dest, state, and msg keys."""
@@ -1548,7 +1558,7 @@ class TestCrossCutting:
         ):
             fsbuilder_main()
 
-        assert "src" in str(exc_info.value).lower()
+        assert "src" in exc_info.value.kwargs["msg"].lower()
 
     def test_hard_requires_src(self, patch_module: None, tmp_path: Any) -> None:
         """state=hard without src fails."""
@@ -1559,7 +1569,7 @@ class TestCrossCutting:
         ):
             fsbuilder_main()
 
-        assert "src" in str(exc_info.value).lower()
+        assert "src" in exc_info.value.kwargs["msg"].lower()
 
     def test_copy_requires_content_or_src(self, patch_module: None, tmp_path: Any) -> None:
         """state=copy without content or src fails."""
@@ -1570,4 +1580,5 @@ class TestCrossCutting:
         ):
             fsbuilder_main()
 
-        assert "content" in str(exc_info.value).lower() or "src" in str(exc_info.value).lower()
+        msg = exc_info.value.kwargs["msg"].lower()
+        assert "content" in msg or "src" in msg
