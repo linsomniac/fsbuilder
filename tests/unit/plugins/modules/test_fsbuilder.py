@@ -269,3 +269,77 @@ class TestModuleSkeleton:
         assert "# BEGIN MANAGED BLOCK" in content
         assert "new line 1" in content
         assert "# END MANAGED BLOCK" in content
+
+
+class TestCopyFromSrc:
+    """Tests for src-based copy operations (codex review fixes)."""
+
+    def test_copy_from_src_preserves_source(self, patch_module: None, tmp_path: Any) -> None:
+        """Test that copy with src does not destroy the source file."""
+        src = str(tmp_path / "source.txt")
+        dest = str(tmp_path / "dest.txt")
+        with open(src, "w") as f:
+            f.write("source content\n")
+
+        with (
+            set_module_args({"dest": dest, "state": "copy", "src": src}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is True
+        # Source must still exist (codex review: atomic_move was destroying it)
+        assert os.path.isfile(src), "Source file was destroyed by copy operation"
+        assert os.path.isfile(dest)
+        with open(dest) as f:
+            assert f.read() == "source content\n"
+        with open(src) as f:
+            assert f.read() == "source content\n"
+
+    def test_copy_from_src_idempotent(self, patch_module: None, tmp_path: Any) -> None:
+        """Test that copy with src is idempotent when content matches."""
+        src = str(tmp_path / "source.txt")
+        dest = str(tmp_path / "dest.txt")
+        with open(src, "w") as f:
+            f.write("same content\n")
+        with open(dest, "w") as f:
+            f.write("same content\n")
+
+        with (
+            set_module_args({"dest": dest, "state": "copy", "src": src}),
+            pytest.raises(AnsibleExitJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        result = extract_result(exc_info.value)
+        assert result["changed"] is False
+
+    def test_copy_content_dest_is_directory_fails(self, patch_module: None, tmp_path: Any) -> None:
+        """Test that copy with content fails when dest is a directory (no force)."""
+        dest = str(tmp_path / "destdir")
+        os.makedirs(dest)
+
+        with (
+            set_module_args({"dest": dest, "state": "copy", "content": "hello"}),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "not a regular file" in str(exc_info.value).lower()
+
+    def test_copy_src_dest_is_directory_fails(self, patch_module: None, tmp_path: Any) -> None:
+        """Test that copy with src fails when dest is a directory (no force)."""
+        src = str(tmp_path / "source.txt")
+        dest = str(tmp_path / "destdir")
+        with open(src, "w") as f:
+            f.write("content")
+        os.makedirs(dest)
+
+        with (
+            set_module_args({"dest": dest, "state": "copy", "src": src}),
+            pytest.raises(AnsibleFailJson) as exc_info,
+        ):
+            fsbuilder_main()
+
+        assert "not a regular file" in str(exc_info.value).lower()

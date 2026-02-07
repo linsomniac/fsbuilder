@@ -492,7 +492,14 @@ class FSBuilder:
     # -- State handlers (stubs for Phase 1, implemented in Phase 2+) --
 
     def _handle_copy(self, params: dict[str, Any]) -> dict[str, Any]:
-        """Handle state: copy (and template after action plugin conversion)."""
+        """Handle state: copy (and template after action plugin conversion).
+
+        AIDEV-NOTE: The 'remote_src' parameter is handled by the action plugin
+        (Phase 3). When remote_src=False, the action plugin transfers the file
+        to a temp path on the remote host and updates 'src' to that temp path.
+        When remote_src=True, the action plugin passes 'src' through unchanged.
+        By the time this handler runs, 'src' always refers to a remote path.
+        """
         dest = params["dest"]
         content = params.get("content")
         src = params.get("src")
@@ -506,10 +513,21 @@ class FSBuilder:
 
         self._makedirs(dest, params)
 
+        # Handle dest conflicts for content-based writes
+        if content is not None and os.path.exists(dest) and not os.path.isfile(dest):
+            if not params.get("force"):
+                self.module.fail_json(
+                    msg=f"Destination exists but is not a regular file: {dest}. Use force=true.",
+                    dest=dest,
+                    state=params["state"],
+                )
+            if not self.module.check_mode:
+                self._force_remove(dest, params)
+
         if content is not None:
             # Content-based write
             result = self._write_content(dest, content, params)
-            if result["changed"] and not self.module.check_mode or not result["changed"]:
+            if not self.module.check_mode:
                 result["changed"] = self._apply_attributes(dest, params, result["changed"])
             result["msg"] = "content updated" if result["changed"] else "content already correct"
             return result
@@ -526,11 +544,28 @@ class FSBuilder:
         return {}  # unreachable, satisfies type checker
 
     def _copy_from_src(self, dest: str, src: str, params: dict[str, Any]) -> dict[str, Any]:
-        """Copy from a source file (remote path) to dest."""
+        """Copy from a source file (remote path) to dest.
+
+        AIDEV-NOTE: We copy src to a temp file first, then atomic_move the temp
+        to dest. This preserves the source file (important for remote_src=true).
+        When the action plugin transfers a file, src is already a temp path that
+        can be moved directly -- but we still copy-then-move for safety.
+        """
         result: dict[str, Any] = {"changed": False, "dest": dest}
 
         if not os.path.exists(src):
             self.module.fail_json(msg=f"Source file not found: {src}", dest=dest)
+
+        # Handle dest conflicts (e.g., dest is a directory or symlink)
+        if os.path.exists(dest) and not os.path.isfile(dest):
+            if not params.get("force"):
+                self.module.fail_json(
+                    msg=f"Destination exists but is not a regular file: {dest}. Use force=true.",
+                    dest=dest,
+                    state=params["state"],
+                )
+            if not self.module.check_mode:
+                self._force_remove(dest, params)
 
         # Compare checksums
         src_checksum = self.module.sha256(src)
@@ -568,17 +603,28 @@ class FSBuilder:
             result["msg"] = "file would be updated"
             return result
 
-        # Validate if requested
-        validate = params.get("validate")
-        if validate:
-            self._validate_file(src, validate)
+        # Copy src to a temp file to avoid destroying the source
+        dest_dir = os.path.dirname(dest) or "."
+        fd, tmp_path = tempfile.mkstemp(dir=dest_dir)
+        try:
+            os.close(fd)
+            shutil.copy2(src, tmp_path)
 
-        # Backup if requested
-        if params.get("backup") and os.path.isfile(dest):
-            result["backup_file"] = self.module.backup_local(dest)
+            # Validate against the temp copy if requested
+            validate = params.get("validate")
+            if validate:
+                self._validate_file(tmp_path, validate)
 
-        # Copy the file
-        self.module.atomic_move(src, dest)
+            # Backup if requested
+            if params.get("backup") and os.path.isfile(dest):
+                result["backup_file"] = self.module.backup_local(dest)
+
+            # Atomic move temp -> dest (preserves src)
+            self.module.atomic_move(tmp_path, dest)
+        except Exception:
+            with contextlib.suppress(OSError):
+                os.unlink(tmp_path)
+            raise
 
         result["changed"] = self._apply_attributes(dest, params, result["changed"])
         result["msg"] = "file updated"
