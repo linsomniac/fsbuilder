@@ -18,6 +18,8 @@ tags:
   - file
   - lineinfile
   - blockinfile
-dependencies:
-  ansible.builtin: ">=2.15.0"
+# AIDEV-NOTE: No collection dependencies needed. ansible.builtin is part of
+# ansible-core itself and must not be listed here (Galaxy can't resolve it).
+# The minimum ansible-core version requirement is documented in README.md.
+dependencies: {}
 repository: https://github.com/linsomniac/fsbuilder

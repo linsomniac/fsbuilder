@@ -1,0 +1,92 @@
+---
+name: Test
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  lint:
+    name: Lint & Type Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff format check
+        run: uv run ruff format --check plugins/ tests/
+
+      - name: Ruff lint
+        run: uv run ruff check plugins/ tests/
+
+      - name: Mypy type check
+        run: uv run mypy plugins/
+
+  test:
+    name: Unit Tests (Python ${{ matrix.python-version }}, ansible-core ${{ matrix.ansible-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+        ansible-version: ["2.15", "2.16", "2.17"]
+        exclude:
+          # ansible-core 2.15 doesn't support Python 3.13
+          - python-version: "3.13"
+            ansible-version: "2.15"
+    # AIDEV-NOTE: ANSIBLE_LOCAL_TEMP/ANSIBLE_REMOTE_TEMP avoid permission issues in CI
+    env:
+      ANSIBLE_LOCAL_TEMP: /tmp/ansible-local-tmp
+      ANSIBLE_REMOTE_TEMP: /tmp/ansible-remote-tmp
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dependencies with ansible-core ${{ matrix.ansible-version }}
+        run: |
+          uv sync --extra dev
+          uv pip install "ansible-core~=${{ matrix.ansible-version }}.0"
+
+      - name: Run unit tests with coverage
+        run: uv run pytest tests/unit/ -v --cov=plugins --cov-report=term-missing
+
+  collection-build:
+    name: Collection Build & Install
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install ansible-core
+        run: uv sync --extra dev
+
+      - name: Build collection
+        run: uv run ansible-galaxy collection build --force
+
+      - name: Install collection from tarball
+        run: uv run ansible-galaxy collection install linsomniac-fsbuilder-*.tar.gz -p ./test-collections
+
+      - name: Verify FQCN resolves
+        run: |
+          ANSIBLE_COLLECTIONS_PATH=./test-collections \
+            uv run ansible-doc linsomniac.fsbuilder.fsbuilder --type module | head -5
