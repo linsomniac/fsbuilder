@@ -163,15 +163,33 @@ class ActionModule(ActionBase):
                 f"fsbuilder: template file not found: '{src}' (searched in templates/ directories)"
             ) from e
 
-        # Read the template source
-        with open(source_path) as f:
-            template_data = f.read()
+        # AIDEV-NOTE: Use get_real_file() for vault-encrypted file support.
+        # This decrypts vault files to a temp location; cleanup_tmp_file()
+        # removes the decrypted temp when done.
+        real_path = self._loader.get_real_file(source_path)
+        try:
+            with open(real_path) as f:
+                template_data = f.read()
+        finally:
+            self._loader.cleanup_tmp_file(real_path)
 
         # Configure templar for template rendering options
         # AIDEV-NOTE: We use self._templar which has access to all task_vars
         # including facts, inventory variables, group_vars, host_vars, etc.
         self._templar.available_variables = task_vars
 
+        # AIDEV-NOTE: Configure template search paths so that Jinja2
+        # {% include %} and {% import %} directives resolve relative to the
+        # template's directory and Ansible's search paths.
+        searchpath = self._task.get_search_path()
+        searchpath.insert(0, os.path.dirname(source_path))
+        self._templar.environment.loader.searchpath = searchpath
+
+        # AIDEV-NOTE: Template rendering options (trim_blocks, lstrip_blocks,
+        # newline_sequence, output_encoding) are currently stripped and not
+        # applied to the Jinja2 environment. Full support would require
+        # creating a new templar environment with these overrides, similar to
+        # ansible.builtin.template's approach. This is a known limitation.
         # Render the template
         try:
             rendered = self._templar.do_template(
@@ -187,7 +205,12 @@ class ActionModule(ActionBase):
         args["state"] = "copy"
         args.pop("src", None)
         # Remove template-specific args that the module doesn't need
-        for key in ("newline_sequence", "trim_blocks", "lstrip_blocks", "output_encoding"):
+        for key in (
+            "newline_sequence",
+            "trim_blocks",
+            "lstrip_blocks",
+            "output_encoding",
+        ):
             args.pop(key, None)
 
         return args
@@ -259,12 +282,17 @@ class ActionModule(ActionBase):
                 f"fsbuilder: source file not found: '{src}' (searched in files/ directories)"
             ) from e
 
-        # Transfer the file to a temporary location on the remote host
-        tmp_src = self._connection._shell.join_path(
-            self._connection._shell.tmpdir, os.path.basename(src)
-        )
-        self._transfer_file(source_path, tmp_src)
-        self._fixup_perms2((tmp_src,))
+        # AIDEV-NOTE: Use get_real_file() for vault-encrypted file support.
+        real_path = self._loader.get_real_file(source_path)
+        try:
+            # Transfer the file to a temporary location on the remote host
+            tmp_src = self._connection._shell.join_path(
+                self._connection._shell.tmpdir, os.path.basename(src)
+            )
+            self._transfer_file(real_path, tmp_src)
+            self._fixup_perms2((tmp_src,))
+        finally:
+            self._loader.cleanup_tmp_file(real_path)
 
         # Update src to point to the remote temp path
         args["src"] = tmp_src

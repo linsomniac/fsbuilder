@@ -35,11 +35,16 @@ def action_module() -> ActionModule:
     # Mock the play context
     play_context = MagicMock()
 
-    # Mock the loader
+    # Mock the loader (get_real_file returns the same path by default)
     loader = MagicMock()
+    loader.get_real_file.side_effect = lambda path, **kw: path
+    loader.cleanup_tmp_file.return_value = None
 
     # Mock the templar
     templar = MagicMock()
+    templar.environment = MagicMock()
+    templar.environment.loader = MagicMock()
+    templar.environment.loader.searchpath = []
 
     # Mock shared_loader_obj
     shared_loader_obj = MagicMock()
@@ -144,6 +149,7 @@ class TestTemplateHandling:
         """Default src is basename(dest) + .j2."""
         action_module._templar.do_template.return_value = "rendered content"
         action_module._find_needle = MagicMock(return_value="/path/to/templates/config.ini.j2")
+        action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
         mock_file = MagicMock()
         mock_file.read.return_value = "template {{ var }}"
@@ -158,6 +164,9 @@ class TestTemplateHandling:
 
         # Should have searched for config.ini.j2
         action_module._find_needle.assert_called_once_with("templates", "config.ini.j2")
+        # Vault support: get_real_file/cleanup_tmp_file called
+        action_module._loader.get_real_file.assert_called_once()
+        action_module._loader.cleanup_tmp_file.assert_called_once()
         assert result["state"] == "copy"
         assert result["content"] == "rendered content"
         assert "src" not in result
@@ -166,6 +175,7 @@ class TestTemplateHandling:
         """Dest ending with / gets src basename appended (minus .j2)."""
         action_module._templar.do_template.return_value = "content"
         action_module._find_needle = MagicMock(return_value="/path/to/templates/app.conf.j2")
+        action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
         mock_file = MagicMock()
         mock_file.read.return_value = "template"
@@ -173,7 +183,11 @@ class TestTemplateHandling:
         mock_file.__exit__ = MagicMock(return_value=False)
 
         with patch("builtins.open", return_value=mock_file):
-            args = {"dest": "/etc/myapp/", "state": "template", "src": "app.conf.j2"}
+            args = {
+                "dest": "/etc/myapp/",
+                "state": "template",
+                "src": "app.conf.j2",
+            }
             result = action_module._process_template_file(args, {}, args["dest"], args["src"])
 
         assert result["dest"] == "/etc/myapp/app.conf"
@@ -233,6 +247,9 @@ class TestCopyFileTransfer:
         action_module._find_needle.assert_called_once_with("files", "myfile.txt")
         action_module._transfer_file.assert_called_once()
         action_module._fixup_perms2.assert_called_once()
+        # Vault support: get_real_file/cleanup_tmp_file called
+        action_module._loader.get_real_file.assert_called_once()
+        action_module._loader.cleanup_tmp_file.assert_called_once()
         # src should now be the remote temp path
         assert result["src"] != "myfile.txt"
 
@@ -246,3 +263,58 @@ class TestCopyFileTransfer:
         action_module._process_copy(args, {})
 
         action_module._find_needle.assert_called_once_with("files", "config.ini")
+
+
+class TestRunDispatch:
+    """Test the run() method dispatches correctly per state."""
+
+    def test_run_template_dispatches_to_process_template(self, action_module: ActionModule) -> None:
+        """run() with state=template calls _process_template."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "template",
+            "content": "{{ var }}",
+        }
+        action_module._task.loop = None
+        action_module._templar.do_template.return_value = "rendered"
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        result = action_module.run(task_vars={})
+
+        # _execute_module should receive state=copy (template converts to copy)
+        call_args = action_module._execute_module.call_args
+        assert call_args.kwargs["module_args"]["state"] == "copy"
+        assert call_args.kwargs["module_args"]["content"] == "rendered"
+        assert result == {"changed": True}
+
+    def test_run_directory_passes_through(self, action_module: ActionModule) -> None:
+        """run() with state=directory passes args through unchanged."""
+        action_module._task.args = {
+            "dest": "/etc/myapp",
+            "state": "directory",
+            "mode": "0755",
+        }
+        action_module._task.loop = None
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        call_args = action_module._execute_module.call_args
+        assert call_args.kwargs["module_args"]["state"] == "directory"
+        assert call_args.kwargs["module_args"]["dest"] == "/etc/myapp"
+
+    def test_run_copy_with_content_passes_through(self, action_module: ActionModule) -> None:
+        """run() with state=copy and content passes through."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "copy",
+            "content": "hello",
+        }
+        action_module._task.loop = None
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        call_args = action_module._execute_module.call_args
+        assert call_args.kwargs["module_args"]["state"] == "copy"
+        assert call_args.kwargs["module_args"]["content"] == "hello"
