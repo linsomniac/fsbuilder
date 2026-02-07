@@ -813,23 +813,23 @@ result.
 ### Checklist
 
 #### Documentation
-- [ ] Complete `DOCUMENTATION` string in module file with all parameters,
+- [X] Complete `DOCUMENTATION` string in module file with all parameters,
       notes, and examples
-- [ ] Complete `EXAMPLES` string with comprehensive usage examples
+- [X] Complete `EXAMPLES` string with comprehensive usage examples
       (mirror the spec's comprehensive example)
-- [ ] Complete `RETURN` string documenting all return values
-- [ ] Write `README.md` with:
+- [X] Complete `RETURN` string documenting all return values
+- [X] Write `README.md` with:
   - Installation instructions (collection and role-level)
   - Quick start example
   - Parameter reference (or link to module docs)
   - Link to `fsbuilder.md` spec
-- [ ] Create `CHANGELOG.md` with initial release notes
+- [X] Create `CHANGELOG.md` with initial release notes
 
 #### Role-Level Compatibility
 - [ ] Verify symlinks work: test with a playbook that uses the role instead
       of the collection
-- [ ] Document role-level usage in README
-- [ ] Create `roles/fsbuilder/meta/main.yml` with role metadata
+- [X] Document role-level usage in README
+- [X] Create `roles/fsbuilder/meta/main.yml` with role metadata
 
 #### CI/CD
 - [ ] Create `.github/workflows/test.yml` (or equivalent) with:
@@ -838,17 +838,17 @@ result.
   - Unit tests: `pytest tests/unit/ -v --cov`
   - Molecule tests: run all scenarios
   - Matrix: test against ansible-core 2.15, 2.16, 2.17 (if released)
-- [ ] Create `Makefile` or `justfile` with convenience targets:
+- [X] Create `Makefile` or `justfile` with convenience targets:
   - `make lint`, `make test-unit`, `make test-integration`, `make test-all`
 
 #### Collection Build
-- [ ] `ansible-galaxy collection build` produces a valid tarball
+- [X] `ansible-galaxy collection build` produces a valid tarball
 - [ ] `ansible-galaxy collection install` from tarball works
 - [ ] Verify FQCN usage: `aix.fsbuilder.fsbuilder` resolves correctly
 - [ ] Run `ansible-test sanity` (if applicable)
 
 #### Final Validation
-- [ ] Run all unit tests: `pytest tests/unit/ -v`
+- [X] Run all unit tests: `pytest tests/unit/ -v`
 - [ ] Run all Molecule scenarios: `molecule test --all`
 - [ ] Run the comprehensive example from `fsbuilder.md` against a test
       container and verify all operations

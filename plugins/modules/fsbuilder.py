@@ -153,12 +153,94 @@ EXAMPLES = r"""
       [main]
       setting = value
 
+- name: Copy a file from the controller
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/static.dat
+    state: copy
+
+- name: Render a Jinja2 template (default state)
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/config.ini
+    # state: template is the default; renders config.ini.j2
+
+- name: Render an inline template
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/version.txt
+    state: template
+    content: "version={{ app_version }}"
+
+- name: Create a symlink
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/current
+    state: link
+    src: /opt/myapp/releases/v2.1
+
+- name: Create a hard link
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/hardlink.txt
+    state: hard
+    src: /etc/myapp/original.txt
+
+- name: Ensure a file exists (empty if new)
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/flag
+    state: exists
+
+- name: Touch a file (always update timestamp)
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/.last-deploy
+    state: touch
+
+- name: Remove a file
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/legacy.conf
+    state: absent
+
+- name: Remove files matching a glob
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/myapp/conf.d/*.rpmsave
+    state: absent
+
 - name: Ensure a line is present in sshd_config
   aix.fsbuilder.fsbuilder:
     dest: /etc/ssh/sshd_config
     state: lineinfile
     regexp: "^PermitRootLogin"
     line: "PermitRootLogin no"
+
+- name: Manage a block in /etc/hosts
+  aix.fsbuilder.fsbuilder:
+    dest: /etc/hosts
+    state: blockinfile
+    marker: "# {mark} ANSIBLE MANAGED - myapp"
+    block: |
+      192.168.1.10 app1.internal
+      192.168.1.11 app2.internal
+
+- name: Deploy myapp - comprehensive example with loop
+  aix.fsbuilder.fsbuilder:
+    owner: root
+    group: myapp
+    mode: "0644"
+  loop:
+    - dest: /etc/myapp/conf.d
+      state: directory
+      mode: "0755"
+    - dest: /etc/myapp/config.ini
+      validate: "myapp --check-config %s"
+      backup: true
+    - dest: /etc/myapp/version.txt
+      state: template
+      content: "version={{ app_version }}"
+    - dest: /etc/myapp/static.dat
+      state: copy
+    - dest: /etc/myapp/current
+      state: link
+      src: /opt/myapp/releases/v2.1
+    - dest: /etc/myapp/.last-deploy
+      state: touch
+    - dest: /etc/myapp/legacy.conf
+      state: absent
 """
 
 RETURN = r"""

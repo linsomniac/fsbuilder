@@ -1,0 +1,141 @@
+# aix.fsbuilder
+
+Ansible module that consolidates multiple filesystem operations into a single
+task. Instead of writing separate `ansible.builtin.template`, `copy`, `file`,
+`lineinfile`, and `blockinfile` tasks, define one `fsbuilder` task with a loop.
+
+## Supported States
+
+| State | Description |
+|-------|-------------|
+| `template` | Render Jinja2 template (default state) |
+| `copy` | Copy file or write content |
+| `directory` | Create directory |
+| `exists` | Ensure file exists (create empty if missing) |
+| `touch` | Touch file (always updates timestamp) |
+| `absent` | Remove file/directory (supports globs) |
+| `link` | Create symbolic link |
+| `hard` | Create hard link |
+| `lineinfile` | Ensure a line is present/absent in a file |
+| `blockinfile` | Ensure a block is present/absent in a file |
+
+## Requirements
+
+- ansible-core >= 2.15
+- Python >= 3.9 on controller
+- Python >= 3.6 on remote hosts
+
+## Installation
+
+### As a Collection
+
+```bash
+# From Galaxy (when published)
+ansible-galaxy collection install aix.fsbuilder
+
+# From source
+ansible-galaxy collection build
+ansible-galaxy collection install aix-fsbuilder-0.1.0.tar.gz
+```
+
+### As a Role (for role-level plugin discovery)
+
+Clone the repository into your roles path:
+
+```bash
+git clone https://github.com/aix/fsbuilder roles/fsbuilder
+```
+
+The role includes symlinks in `action_plugins/` and `library/` that point to the
+collection plugins, enabling Ansible's role-level plugin discovery.
+
+## Quick Start
+
+```yaml
+- name: Deploy application config
+  aix.fsbuilder.fsbuilder:
+    owner: root
+    group: myapp
+    mode: "0644"
+  loop:
+    # Create a directory
+    - dest: /etc/myapp/conf.d
+      state: directory
+      mode: "0755"
+
+    # Render a Jinja2 template (default state)
+    - dest: /etc/myapp/config.ini
+      validate: "myapp --check-config %s"
+      backup: true
+
+    # Write literal content
+    - dest: /etc/myapp/version.txt
+      state: copy
+      content: "v1.0.0"
+
+    # Ensure a line in sshd_config
+    - dest: /etc/ssh/sshd_config
+      state: lineinfile
+      regexp: "^PermitRootLogin"
+      line: "PermitRootLogin no"
+
+    # Clean up old files
+    - dest: /etc/myapp/conf.d/*.rpmsave
+      state: absent
+```
+
+## Key Features
+
+- **Loop parameter merging**: Per-item values override task-level defaults
+- **Per-item `when`**: Conditional execution within loop items
+- **Per-item `notify`**: Handler notifications per item
+- **Template rendering**: File-based `.j2` templates and inline content
+- **Validation**: Run a command to validate files before placement
+- **Backup**: Timestamped backups before overwriting
+- **Check mode**: Full `--check` support across all states
+- **Diff mode**: `--diff` shows before/after for content changes
+- **Idempotent**: All states follow the Ansible idempotency contract
+- **Glob support**: `state: absent` supports glob patterns
+
+## Parameters
+
+See the full parameter reference in the module's `DOCUMENTATION` string:
+
+```bash
+ansible-doc aix.fsbuilder.fsbuilder
+```
+
+## Development
+
+```bash
+# Install dev dependencies
+uv sync
+
+# Run linting
+uv run ruff check
+uv run ruff format --check
+uv run mypy plugins/
+
+# Run unit tests
+uv run pytest tests/unit/ -v
+
+# Run with coverage
+uv run pytest tests/unit/ --cov=plugins --cov-report=html
+```
+
+## Architecture
+
+The module is composed of two cooperating components:
+
+- **Action Plugin** (`plugins/action/fsbuilder.py`) -- runs on the Ansible
+  controller. Handles template rendering, file transfer, loop parameter
+  merging, per-item `when` evaluation, and handler notification.
+- **Module** (`plugins/modules/fsbuilder.py`) -- runs on the remote target
+  host. Performs all filesystem operations.
+
+See [design.md](design.md) for the full implementation design document and
+[fsbuilder.md](fsbuilder.md) for the original specification.
+
+## License
+
+MIT
