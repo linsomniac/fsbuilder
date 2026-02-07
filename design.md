@@ -560,161 +560,161 @@ diff mode, idempotency, and error handling.
 ### Checklist
 
 #### Test Infrastructure (`tests/unit/conftest.py`)
-- [ ] `set_module_args(args)` fixture -- injects args into
+- [X] `set_module_args(args)` fixture -- injects args into
       `basic._ANSIBLE_ARGS`
-- [ ] `AnsibleExitJson` / `AnsibleFailJson` exception classes
-- [ ] Auto-patching of `exit_json` / `fail_json` via `monkeypatch`
-- [ ] Helper to extract result from `AnsibleExitJson`
+- [X] `AnsibleExitJson` / `AnsibleFailJson` exception classes
+- [X] Auto-patching of `exit_json` / `fail_json` via `monkeypatch`
+- [X] Helper to extract result from `AnsibleExitJson`
 
 #### Module Tests (`tests/unit/plugins/modules/test_fsbuilder.py`)
 
 ##### State: directory
-- [ ] Test create new directory
-- [ ] Test existing directory is idempotent (no change)
+- [X] Test create new directory
+- [X] Test existing directory is idempotent (no change)
 - [ ] Test directory with mode/owner/group
 - [ ] Test `recurse=True` applies attributes recursively
-- [ ] Test `makedirs=True` creates parent directories
-- [ ] Test `force=True` replaces file with directory
-- [ ] Test `force_backup=True` renames existing file to `.old`
-- [ ] Test check mode does not create directory
-- [ ] Test trailing slash is stripped
+- [X] Test `makedirs=True` creates parent directories
+- [X] Test `force=True` replaces file with directory
+- [X] Test `force_backup=True` renames existing file to `.old`
+- [X] Test check mode does not create directory
+- [X] Test trailing slash is stripped
 
 ##### State: exists
-- [ ] Test creates empty file when missing
-- [ ] Test existing file is idempotent
-- [ ] Test does not update timestamps on existing file
-- [ ] Test check mode
+- [X] Test creates empty file when missing
+- [X] Test existing file is idempotent
+- [X] Test does not update timestamps on existing file
+- [X] Test check mode
 
 ##### State: touch
-- [ ] Test creates file if missing
-- [ ] Test always reports changed on existing file
-- [ ] Test custom `access_time` / `modification_time`
-- [ ] Test check mode
+- [X] Test creates file if missing
+- [X] Test always reports changed on existing file
+- [X] Test custom `access_time` / `modification_time`
+- [X] Test check mode
 
 ##### State: absent
-- [ ] Test removes existing file
-- [ ] Test removes existing directory recursively
-- [ ] Test non-existent path is idempotent (no change)
-- [ ] Test glob pattern matches and removes multiple files
-- [ ] Test glob pattern with no matches is idempotent
-- [ ] Test diff shows removed content
-- [ ] Test check mode does not remove
+- [X] Test removes existing file
+- [X] Test removes existing directory recursively
+- [X] Test non-existent path is idempotent (no change)
+- [X] Test glob pattern matches and removes multiple files
+- [X] Test glob pattern with no matches is idempotent
+- [X] Test diff shows removed content
+- [X] Test check mode does not remove
 
 ##### State: link
-- [ ] Test creates new symlink
-- [ ] Test existing correct symlink is idempotent
-- [ ] Test existing wrong target is changed
-- [ ] Test `force=True` replaces non-link at dest
-- [ ] Test check mode
+- [X] Test creates new symlink
+- [X] Test existing correct symlink is idempotent
+- [X] Test existing wrong target is changed
+- [X] Test `force=True` replaces non-link at dest
+- [X] Test check mode
 
 ##### State: hard
-- [ ] Test creates new hard link
-- [ ] Test existing correct hard link is idempotent (same inode)
-- [ ] Test check mode
+- [X] Test creates new hard link
+- [X] Test existing correct hard link is idempotent (same inode)
+- [X] Test check mode
 
 ##### State: copy (content-based)
-- [ ] Test writes new file with content
-- [ ] Test existing file with same content is idempotent
-- [ ] Test existing file with different content is changed
-- [ ] Test `backup=True` creates timestamped backup
-- [ ] Test `validate` success allows write
-- [ ] Test `validate` failure prevents write and fails
-- [ ] Test `validate` command without `%s` fails
+- [X] Test writes new file with content
+- [X] Test existing file with same content is idempotent
+- [X] Test existing file with different content is changed
+- [X] Test `backup=True` creates timestamped backup
+- [X] Test `validate` success allows write
+- [X] Test `validate` failure prevents write and fails
+- [X] Test `validate` command without `%s` fails
 - [ ] Test atomic write (temp file in same directory)
-- [ ] Test diff mode shows before/after
-- [ ] Test check mode does not write
+- [X] Test diff mode shows before/after
+- [X] Test check mode does not write
 - [ ] Test binary file detection suppresses diff
 
 ##### State: copy (src-based, remote)
-- [ ] Test copies from `src` to `dest` on remote
-- [ ] Test idempotent when content matches
+- [X] Test copies from `src` to `dest` on remote
+- [X] Test idempotent when content matches
 - [ ] Test `remote_src=True` copies from remote path
 
 ##### State: lineinfile
-- [ ] Test add line to end of file (default insertafter=EOF)
-- [ ] Test replace line matching regexp
-- [ ] Test regexp match but line already correct (idempotent)
-- [ ] Test insertafter regex positioning
+- [X] Test add line to end of file (default insertafter=EOF)
+- [X] Test replace line matching regexp
+- [X] Test regexp match but line already correct (idempotent)
+- [X] Test insertafter regex positioning
 - [ ] Test insertbefore regex positioning
-- [ ] Test insertbefore=BOF
-- [ ] Test `line_state=absent` removes matching lines
-- [ ] Test `line_state=absent` with regexp removes all matches
-- [ ] Test file does not exist: creates with line
+- [X] Test insertbefore=BOF
+- [X] Test `line_state=absent` removes matching lines
+- [X] Test `line_state=absent` with regexp removes all matches
+- [X] Test file does not exist: creates with line
 - [ ] Test validate integration
-- [ ] Test diff mode
-- [ ] Test check mode
+- [X] Test diff mode
+- [X] Test check mode
 
 ##### State: blockinfile
-- [ ] Test insert new block at EOF
-- [ ] Test update existing block (markers present)
-- [ ] Test existing block with same content is idempotent
-- [ ] Test custom markers and marker_begin/marker_end
-- [ ] Test `block_state=absent` removes marked block
+- [X] Test insert new block at EOF
+- [X] Test update existing block (markers present)
+- [X] Test existing block with same content is idempotent
+- [X] Test custom markers and marker_begin/marker_end
+- [X] Test `block_state=absent` removes marked block
 - [ ] Test insertafter/insertbefore positioning
-- [ ] Test file does not exist: creates with block
+- [X] Test file does not exist: creates with block
 - [ ] Test validate integration
-- [ ] Test diff mode
-- [ ] Test check mode
+- [X] Test diff mode
+- [X] Test check mode
 
 ##### Cross-cutting concerns
 - [ ] Test `on_error=fail` stops on first error
 - [ ] Test `on_error=continue` processes all items, reports failures
-- [ ] Test `creates` skips item when path exists
-- [ ] Test `removes` skips item when path does not exist
-- [ ] Test `makedirs=True` across multiple state handlers
-- [ ] Test `force=True` with `force_backup=True` across states
-- [ ] Test result structure: items list, changed_count, ok_count,
+- [X] Test `creates` skips item when path exists
+- [X] Test `removes` skips item when path does not exist
+- [X] Test `makedirs=True` across multiple state handlers
+- [X] Test `force=True` with `force_backup=True` across states
+- [X] Test result structure: items list, changed_count, ok_count,
       skipped_count, failed_count
-- [ ] Test `content` and `src` mutual exclusion produces clear error
-- [ ] Test `insertafter` and `insertbefore` mutual exclusion
+- [X] Test `content` and `src` mutual exclusion produces clear error
+- [X] Test `insertafter` and `insertbefore` mutual exclusion
 - [ ] Test `validate` ignored with warning for non-file states
-- [ ] Test `lineinfile` without `line` when `line_state=present` fails
-- [ ] Test `blockinfile` without `block` when `block_state=present` fails
+- [X] Test `lineinfile` without `line` when `line_state=present` fails
+- [X] Test `blockinfile` without `block` when `block_state=present` fails
 
 #### Action Plugin Tests (`tests/unit/plugins/action/test_fsbuilder.py`)
 
 ##### Loop parameter merging
-- [ ] Test merging loop item dict over task args
-- [ ] Test item values override task defaults
-- [ ] Test task defaults used when item omits keys
-- [ ] Test no merge when `self._task.loop` is not set
-- [ ] Test custom `loop_var` name from `loop_control`
+- [X] Test merging loop item dict over task args
+- [X] Test item values override task defaults
+- [X] Test task defaults used when item omits keys
+- [X] Test no merge when `self._task.loop` is not set
+- [X] Test custom `loop_var` name from `loop_control`
 
 ##### Template handling
-- [ ] Test file-based template: `_find_needle` called with 'templates'
-- [ ] Test file-based template: default src is `basename(dest) + ".j2"`
-- [ ] Test template rendering via `_templar.do_template()`
-- [ ] Test rendered content injected, state changed to `copy`
-- [ ] Test inline content template rendering
-- [ ] Test `content` + `src` together raises error
+- [X] Test file-based template: `_find_needle` called with 'templates'
+- [X] Test file-based template: default src is `basename(dest) + ".j2"`
+- [X] Test template rendering via `_templar.do_template()`
+- [X] Test rendered content injected, state changed to `copy`
+- [X] Test inline content template rendering
+- [X] Test `content` + `src` together raises error
 - [ ] Test template rendering options: `trim_blocks`, `lstrip_blocks`,
       `newline_sequence`, `output_encoding`
-- [ ] Test `dest` ending in `/` appends src basename (minus `.j2`)
+- [X] Test `dest` ending in `/` appends src basename (minus `.j2`)
 
 ##### Copy file transfer
-- [ ] Test `_find_needle` called with 'files' for copy state
-- [ ] Test `_transfer_file` called for controller-sourced files
-- [ ] Test `remote_src=True` skips file transfer
-- [ ] Test `content`-based copy passes through to module
+- [X] Test `_find_needle` called with 'files' for copy state
+- [X] Test `_transfer_file` called for controller-sourced files
+- [X] Test `remote_src=True` skips file transfer
+- [X] Test `content`-based copy passes through to module
 
 ##### Per-item when evaluation
-- [ ] Test `when` evaluates to True: module is executed
-- [ ] Test `when` evaluates to False: module is skipped, skip result returned
-- [ ] Test `when` expression has access to task_vars
-- [ ] Test `when` evaluation error produces clear failure
+- [X] Test `when` evaluates to True: module is executed
+- [X] Test `when` evaluates to False: module is skipped, skip result returned
+- [X] Test `when` expression has access to task_vars
+- [X] Test `when` evaluation error produces clear failure
 
 ##### Handler notification
-- [ ] Test per-item `notify` collected when item changed
-- [ ] Test per-item `notify` not collected when item not changed
-- [ ] Test task-level and item-level notify merged
-- [ ] Test `notify` as string and list
-- [ ] Test no notification when nothing changed
+- [X] Test per-item `notify` collected when item changed
+- [X] Test per-item `notify` not collected when item not changed
+- [X] Test task-level and item-level notify merged
+- [X] Test `notify` as string and list
+- [X] Test no notification when nothing changed
 
 #### Test Execution
-- [ ] All unit tests pass: `pytest tests/unit/ -v`
+- [X] All unit tests pass: `pytest tests/unit/ -v`
 - [ ] Coverage report: `pytest tests/unit/ --cov=plugins --cov-report=html`
 - [ ] Target >= 90% line coverage for module, >= 80% for action plugin
-- [ ] Run `ruff format`, `ruff check`, and `mypy`
+- [X] Run `ruff format`, `ruff check`, and `mypy`
 
 ---
 
