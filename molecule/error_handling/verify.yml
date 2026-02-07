@@ -1,0 +1,61 @@
+---
+- name: Verify - error handling produced correct results
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    - name: Read error results
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/error_results.txt"
+      register: results
+
+    - name: Assert validate failure was reported
+      ansible.builtin.assert:
+        that:
+          - "'validate_failed=True' in (results.content | b64decode)"
+
+    - name: Assert mutual exclusion error was reported
+      ansible.builtin.assert:
+        that:
+          - "'mutual_excl_failed=True' in (results.content | b64decode)"
+
+    - name: Assert creates conditional skipped
+      ansible.builtin.assert:
+        that:
+          - "'creates_changed=False' in (results.content | b64decode)"
+
+    - name: Assert removes conditional skipped
+      ansible.builtin.assert:
+        that:
+          - "'removes_changed=False' in (results.content | b64decode)"
+
+    - name: Read validated file - should be unchanged
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/validate_test.txt"
+      register: validate_file
+
+    - name: Assert validation failure left original file intact
+      ansible.builtin.assert:
+        that:
+          - "'original content' in (validate_file.content | b64decode)"
+
+    - name: Check creates output was not written
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/creates_output.txt"
+      register: creates_stat
+
+    - name: Assert creates output does not exist
+      ansible.builtin.assert:
+        that:
+          - not creates_stat.stat.exists
+
+    - name: Check removes output was not written
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/removes_output.txt"
+      register: removes_stat
+
+    - name: Assert removes output does not exist
+      ansible.builtin.assert:
+        that:
+          - not removes_stat.stat.exists

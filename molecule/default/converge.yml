@@ -1,0 +1,105 @@
+---
+- name: Converge - exercise all fsbuilder states
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+    greeting: "Hello from fsbuilder"
+  tasks:
+    - name: Create test directory
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app"
+        state: directory
+        mode: "0755"
+
+    - name: Copy with inline content
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/content.txt"
+        state: copy
+        content: "known content string\n"
+
+    - name: Copy from controller file
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/static.txt"
+        state: copy
+        src: static_file.txt
+
+    - name: Template from .j2 file
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/template.txt"
+        state: template
+        src: greeting.j2
+
+    - name: Template with inline content
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/inline_template.txt"
+        state: template
+        content: "Rendered: {{ greeting }}\n"
+
+    - name: Create symlink
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/link_to_content"
+        state: link
+        src: "{{ test_dir }}/app/content.txt"
+
+    - name: Create hard link
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/hard_to_content"
+        state: hard
+        src: "{{ test_dir }}/app/content.txt"
+
+    - name: Ensure file exists
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/ensured.txt"
+        state: exists
+
+    - name: Touch a file
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/touched.txt"
+        state: touch
+
+    - name: Create file to be removed
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/to_remove.txt"
+        state: copy
+        content: "will be removed\n"
+
+    - name: Remove the file
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/to_remove.txt"
+        state: absent
+
+    - name: Create config file for lineinfile
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/config.ini"
+        state: copy
+        content: |
+          [section1]
+          key1=value1
+          [section2]
+          key2=value2
+
+    - name: Add line via lineinfile
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/config.ini"
+        state: lineinfile
+        line: "key3=value3"
+        insertafter: "\\[section2\\]"
+
+    - name: Create file for blockinfile
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/block_config.txt"
+        state: copy
+        content: |
+          # top section
+          existing_line=true
+          # bottom section
+
+    - name: Add block via blockinfile
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/app/block_config.txt"
+        state: blockinfile
+        block: |
+          added_key1=foo
+          added_key2=bar
+        insertafter: "# top section"

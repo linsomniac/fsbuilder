@@ -1,0 +1,65 @@
+---
+- name: Converge - error handling tests
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    - name: Create test directory
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}"
+        state: directory
+
+    - name: Create original file for validate test
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/validate_test.txt"
+        state: copy
+        content: "original content\n"
+
+    - name: Write invalid content with validate (should fail)
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/validate_test.txt"
+        state: copy
+        content: "invalid content\n"
+        validate: "grep 'must_match_this' %s"
+      ignore_errors: true
+      register: validate_result
+
+    - name: Test src + content mutual exclusion (should fail)
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/mutual_excl.txt"
+        state: copy
+        content: "some content"
+        src: /nonexistent
+      ignore_errors: true
+      register: mutual_excl_result
+
+    - name: Create file for creates conditional test
+      ansible.builtin.file:
+        path: "{{ test_dir }}/already_exists.txt"
+        state: touch
+
+    - name: Test creates conditional (should skip)
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/creates_output.txt"
+        state: copy
+        content: "should not be written\n"
+        creates: "{{ test_dir }}/already_exists.txt"
+      register: creates_result
+
+    - name: Test removes conditional (should skip - file doesn't exist)
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/removes_output.txt"
+        state: copy
+        content: "should not be written\n"
+        removes: "{{ test_dir }}/nonexistent_trigger.txt"
+      register: removes_result
+
+    - name: Save error results
+      ansible.builtin.copy:
+        content: |
+          validate_failed={{ validate_result.failed }}
+          mutual_excl_failed={{ mutual_excl_result.failed }}
+          creates_changed={{ creates_result.changed }}
+          removes_changed={{ removes_result.changed }}
+        dest: "{{ test_dir }}/error_results.txt"

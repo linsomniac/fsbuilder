@@ -1,0 +1,36 @@
+---
+# AIDEV-NOTE: Error handling scenario tests failure modes and conditionals.
+# Idempotence step excluded because error tests (ignore_errors, creates/removes)
+# are inherently non-idempotent.
+driver:
+  name: docker
+platforms:
+  - name: fsbuilder-error-handling
+    image: geerlingguy/docker-ubuntu2404-ansible:latest
+    pre_build_image: true
+    privileged: false
+    tmpfs:
+      - /tmp
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/test-collections:~/.ansible/collections
+  playbooks:
+    prepare: ../default/prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+verifier:
+  name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - cleanup
+    - destroy

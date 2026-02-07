@@ -1,0 +1,37 @@
+---
+- name: Verify - check mode did not modify filesystem
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    - name: Read check mode results
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/check_results.txt"
+      register: results
+
+    - name: Assert check mode reported changed
+      ansible.builtin.assert:
+        that:
+          - "'copy_changed=True' in (results.content | b64decode)"
+          - "'dir_changed=True' in (results.content | b64decode)"
+
+    - name: Read original file
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/check_test.txt"
+      register: original_file
+
+    - name: Assert file was NOT modified by check mode
+      ansible.builtin.assert:
+        that:
+          - "'original content' in (original_file.content | b64decode)"
+
+    - name: Check directory was NOT created by check mode
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/check_dir"
+      register: dir_stat
+
+    - name: Assert directory does not exist
+      ansible.builtin.assert:
+        that:
+          - not dir_stat.stat.exists

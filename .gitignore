@@ -12,3 +12,4 @@ build/
 htmlcov/
 .coverage
 *.tar.gz
+test-collections/

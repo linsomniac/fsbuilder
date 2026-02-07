@@ -1,0 +1,36 @@
+---
+# AIDEV-NOTE: Check mode scenario verifies that check_mode=true reports changed
+# without modifying the filesystem. The idempotence step is excluded because
+# check_mode tasks are designed to always report changed.
+driver:
+  name: docker
+platforms:
+  - name: fsbuilder-check-mode
+    image: geerlingguy/docker-ubuntu2404-ansible:latest
+    pre_build_image: true
+    privileged: false
+    tmpfs:
+      - /tmp
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/test-collections:~/.ansible/collections
+  playbooks:
+    prepare: ../default/prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+verifier:
+  name: ansible
+scenario:
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - cleanup
+    - destroy

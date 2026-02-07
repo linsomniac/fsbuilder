@@ -1,0 +1,27 @@
+---
+- name: Verify - filesystem state correct after idempotency run
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    - name: Check directory still exists
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app"
+      register: dir_stat
+
+    - name: Assert directory intact
+      ansible.builtin.assert:
+        that:
+          - dir_stat.stat.exists
+          - dir_stat.stat.isdir
+
+    - name: Read content.txt
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/app/content.txt"
+      register: content_file
+
+    - name: Assert content unchanged
+      ansible.builtin.assert:
+        that:
+          - "'known content string' in (content_file.content | b64decode)"

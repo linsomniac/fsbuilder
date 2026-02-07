@@ -128,7 +128,7 @@ class TestTemplateHandling:
 
     def test_inline_content_template(self, action_module: ActionModule) -> None:
         """Inline content is rendered and state changed to copy."""
-        action_module._templar.do_template.return_value = "rendered: hello world"
+        action_module._templar.template.return_value = "rendered: hello world"
         action_module._task.loop = None
 
         action_module._task.args = {
@@ -143,11 +143,11 @@ class TestTemplateHandling:
 
         assert result["state"] == "copy"
         assert result["content"] == "rendered: hello world"
-        action_module._templar.do_template.assert_called_once()
+        action_module._templar.template.assert_called_once()
 
     def test_file_based_template_default_src(self, action_module: ActionModule) -> None:
         """Default src is basename(dest) + .j2."""
-        action_module._templar.do_template.return_value = "rendered content"
+        action_module._templar.template.return_value = "rendered content"
         action_module._find_needle = MagicMock(return_value="/path/to/templates/config.ini.j2")
         action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
@@ -173,7 +173,7 @@ class TestTemplateHandling:
 
     def test_dest_ending_with_slash(self, action_module: ActionModule) -> None:
         """Dest ending with / gets src basename appended (minus .j2)."""
-        action_module._templar.do_template.return_value = "content"
+        action_module._templar.template.return_value = "content"
         action_module._find_needle = MagicMock(return_value="/path/to/templates/app.conf.j2")
         action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
@@ -276,7 +276,7 @@ class TestRunDispatch:
             "content": "{{ var }}",
         }
         action_module._task.loop = None
-        action_module._templar.do_template.return_value = "rendered"
+        action_module._templar.template.return_value = "rendered"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         result = action_module.run(task_vars={})
@@ -566,7 +566,7 @@ class TestTemplateRenderingOptions:
         self, action_module: ActionModule
     ) -> None:
         """Template rendering options are stripped from module args for file templates."""
-        action_module._templar.do_template.return_value = "rendered content"
+        action_module._templar.template.return_value = "rendered content"
         action_module._find_needle = MagicMock(return_value="/path/to/templates/config.j2")
         action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
@@ -601,7 +601,7 @@ class TestTemplateRenderingOptions:
         self, action_module: ActionModule
     ) -> None:
         """Template rendering options are stripped from module args for inline templates."""
-        action_module._templar.do_template.return_value = "rendered inline"
+        action_module._templar.template.return_value = "rendered inline"
 
         args = {
             "dest": "/etc/myapp/version.txt",
@@ -634,7 +634,7 @@ class TestTemplateRenderingOptions:
             "output_encoding": "utf-8",
         }
         action_module._task.loop = None
-        action_module._templar.do_template.return_value = "rendered"
+        action_module._templar.template.return_value = "rendered"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         result = action_module.run(task_vars={"var": "value"})

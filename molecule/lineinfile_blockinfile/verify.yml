@@ -1,0 +1,66 @@
+---
+- name: Verify - lineinfile and blockinfile modifications
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    # --- lineinfile verification ---
+    - name: Read lineinfile.conf
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/lineinfile.conf"
+      register: lineinfile_content
+
+    - name: Set decoded content
+      ansible.builtin.set_fact:
+        lif_content: "{{ lineinfile_content.content | b64decode }}"
+
+    - name: Assert lineinfile modifications
+      ansible.builtin.assert:
+        that:
+          - "'name=mydb' in lif_content"
+          - "'port=5433' in lif_content"
+          - "'port=5432' not in lif_content"
+          - "'# cache configuration below' in lif_content"
+          # host=localhost lines were removed
+          - "'host=localhost' not in lif_content"
+
+    # --- blockinfile verification ---
+    - name: Read blockinfile.conf
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/blockinfile.conf"
+      register: blockinfile_content
+
+    - name: Set decoded block content
+      ansible.builtin.set_fact:
+        bif_content: "{{ blockinfile_content.content | b64decode }}"
+
+    - name: Assert custom marker block with updated content
+      ansible.builtin.assert:
+        that:
+          - "'# BEGIN SSL MANAGED BLOCK' in bif_content"
+          - "'ssl_cert=/etc/ssl/new_cert.pem' in bif_content"
+          - "'ssl_key=/etc/ssl/new_key.pem' in bif_content"
+          - "'ssl_ca=/etc/ssl/ca.pem' in bif_content"
+          - "'# END SSL MANAGED BLOCK' in bif_content"
+          # Old values should be replaced
+          - "'ssl_cert=/etc/ssl/cert.pem' not in bif_content"
+
+    - name: Assert default marker block present
+      ansible.builtin.assert:
+        that:
+          - "'# BEGIN MANAGED BLOCK' in bif_content"
+          - "'log_level=info' in bif_content"
+          - "'log_file=/var/log/app.log' in bif_content"
+          - "'# END MANAGED BLOCK' in bif_content"
+
+    # --- idempotency verification ---
+    - name: Read idempotent result
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/idempotent_result.txt"
+      register: idempotent
+
+    - name: Assert blockinfile second run was idempotent
+      ansible.builtin.assert:
+        that:
+          - "'blockinfile_idempotent_changed=False' in (idempotent.content | b64decode)"

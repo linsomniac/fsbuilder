@@ -1,0 +1,109 @@
+---
+- name: Converge - lineinfile and blockinfile comprehensive tests
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    - name: Create test directory
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}"
+        state: directory
+
+    # --- lineinfile tests ---
+    - name: Create base config for lineinfile tests
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/lineinfile.conf"
+        state: copy
+        content: |
+          # Application config
+          [database]
+          host=localhost
+          port=5432
+          [cache]
+          host=localhost
+          port=6379
+
+    - name: Add line after database section
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/lineinfile.conf"
+        state: lineinfile
+        line: "name=mydb"
+        insertafter: "\\[database\\]"
+
+    - name: Replace line matching regexp
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/lineinfile.conf"
+        state: lineinfile
+        regexp: "^port=5432"
+        line: "port=5433"
+
+    - name: Insert before cache section
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/lineinfile.conf"
+        state: lineinfile
+        line: "# cache configuration below"
+        insertbefore: "\\[cache\\]"
+
+    - name: Remove a line
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/lineinfile.conf"
+        state: lineinfile
+        regexp: "^host=localhost"
+        line: "host=localhost"
+        line_state: absent
+
+    # --- blockinfile tests ---
+    - name: Create base config for blockinfile tests
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/blockinfile.conf"
+        state: copy
+        content: |
+          # Server config
+          listen_addr=0.0.0.0
+          # SSL section
+          # End config
+
+    - name: Add block after SSL section with custom markers
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/blockinfile.conf"
+        state: blockinfile
+        block: |
+          ssl_cert=/etc/ssl/cert.pem
+          ssl_key=/etc/ssl/key.pem
+        marker: "# {mark} SSL MANAGED BLOCK"
+        insertafter: "# SSL section"
+
+    - name: Update the block (should replace in-place)
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/blockinfile.conf"
+        state: blockinfile
+        block: |
+          ssl_cert=/etc/ssl/new_cert.pem
+          ssl_key=/etc/ssl/new_key.pem
+          ssl_ca=/etc/ssl/ca.pem
+        marker: "# {mark} SSL MANAGED BLOCK"
+
+    - name: Add another block with default markers
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/blockinfile.conf"
+        state: blockinfile
+        block: |
+          log_level=info
+          log_file=/var/log/app.log
+        insertbefore: "# End config"
+
+    - name: Run idempotency check - second run
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/blockinfile.conf"
+        state: blockinfile
+        block: |
+          log_level=info
+          log_file=/var/log/app.log
+        insertbefore: "# End config"
+      register: idempotent_result
+
+    - name: Save idempotent result
+      ansible.builtin.copy:
+        content: "blockinfile_idempotent_changed={{ idempotent_result.changed }}"
+        dest: "{{ test_dir }}/idempotent_result.txt"

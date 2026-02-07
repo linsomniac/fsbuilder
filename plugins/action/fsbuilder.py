@@ -16,6 +16,16 @@ from typing import Any
 from ansible.errors import AnsibleError
 from ansible.plugins.action import ActionBase
 
+# AIDEV-NOTE: ansible-core 2.20+ requires trust_as_template() to mark file
+# content for Jinja2 rendering. Older versions (2.15-2.19) render templates
+# without this wrapper. Import conditionally for backward compatibility.
+try:
+    from ansible.template import trust_as_template
+except ImportError:
+
+    def trust_as_template(s: str) -> str:  # type: ignore[misc]
+        return s
+
 
 class ActionModule(ActionBase):
     """Controller-side action plugin for fsbuilder.
@@ -71,8 +81,11 @@ class ActionModule(ActionBase):
             raise AnsibleError(f"fsbuilder action plugin error: {e}") from e
 
         # Step 5: Execute the module on the remote host
+        # AIDEV-NOTE: Must use FQCN so the module resolves when installed as
+        # a collection. The action plugin is already resolved via FQCN by Ansible,
+        # but _execute_module needs the full name to find the module on the remote.
         result: dict[str, Any] = self._execute_module(
-            module_name="fsbuilder",
+            module_name="linsomniac.fsbuilder.fsbuilder",
             module_args=module_args,
             task_vars=task_vars,
         )
@@ -187,7 +200,7 @@ class ActionModule(ActionBase):
         real_path = self._loader.get_real_file(source_path)
         try:
             with open(real_path) as f:
-                template_data = f.read()
+                template_data = trust_as_template(f.read())
         finally:
             self._loader.cleanup_tmp_file(real_path)
 
@@ -210,7 +223,7 @@ class ActionModule(ActionBase):
         # ansible.builtin.template's approach. This is a known limitation.
         # Render the template
         try:
-            rendered = self._templar.do_template(
+            rendered = self._templar.template(
                 template_data,
                 preserve_trailing_newlines=True,
                 escape_backslashes=False,
@@ -242,7 +255,7 @@ class ActionModule(ActionBase):
         self._templar.available_variables = task_vars
 
         try:
-            rendered = self._templar.do_template(
+            rendered = self._templar.template(
                 content,
                 preserve_trailing_newlines=True,
                 escape_backslashes=False,

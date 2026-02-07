@@ -1,0 +1,35 @@
+---
+# AIDEV-NOTE: The prepare step runs on the controller (localhost) to build and
+# install the collection from source, making the FQCN available to converge.
+- name: Prepare - install collection from source
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars:
+    project_dir: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
+  tasks:
+    - name: Build collection tarball
+      ansible.builtin.command:
+        cmd: ansible-galaxy collection build --force
+        chdir: "{{ project_dir }}"
+      changed_when: true
+
+    - name: Find built tarball
+      ansible.builtin.find:
+        paths: "{{ project_dir }}"
+        patterns: "linsomniac-fsbuilder-*.tar.gz"
+      register: tarball_files
+
+    - name: Install collection from tarball
+      ansible.builtin.command:
+        cmd: >-
+          ansible-galaxy collection install
+          {{ tarball_files.files[0].path }}
+          -p {{ project_dir }}/test-collections
+          --force
+      changed_when: true
+
+    - name: Clean up tarball
+      ansible.builtin.file:
+        path: "{{ tarball_files.files[0].path }}"
+        state: absent

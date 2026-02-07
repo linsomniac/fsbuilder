@@ -1,0 +1,42 @@
+---
+# AIDEV-NOTE: Default molecule scenario tests all fsbuilder states end-to-end.
+# The collection is built and installed locally so the FQCN resolves on the
+# controller side (where the action plugin runs). The module runs on the
+# remote (Docker container) via Ansible's normal connection mechanism.
+driver:
+  name: docker
+platforms:
+  - name: fsbuilder-test
+    image: geerlingguy/docker-ubuntu2404-ansible:latest
+    pre_build_image: true
+    privileged: false
+    tmpfs:
+      - /tmp
+provisioner:
+  name: ansible
+  config_options:
+    defaults:
+      # AIDEV-NOTE: Tell Ansible where to find the collection installed by prepare.
+      # MOLECULE_PROJECT_DIRECTORY is always set by molecule to the project root.
+      collections_path: ${MOLECULE_PROJECT_DIRECTORY}/test-collections:~/.ansible/collections
+  playbooks:
+    prepare: prepare.yml
+    converge: converge.yml
+    verify: verify.yml
+verifier:
+  name: ansible
+# AIDEV-NOTE: Skip idempotence in default scenario since it includes touch
+# and create-then-remove sequences that are intentionally non-idempotent.
+# Idempotency testing is handled by the dedicated idempotency scenario.
+scenario:
+  test_sequence:
+    - dependency
+    - cleanup
+    - destroy
+    - syntax
+    - create
+    - prepare
+    - converge
+    - verify
+    - cleanup
+    - destroy

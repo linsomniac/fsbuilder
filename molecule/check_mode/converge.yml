@@ -1,0 +1,40 @@
+---
+- name: Converge - check mode test
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    - name: Create test directory
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}"
+        state: directory
+
+    - name: Create initial file
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/check_test.txt"
+        state: copy
+        content: "original content\n"
+
+    - name: Run copy in check mode (should report changed but not modify)
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/check_test.txt"
+        state: copy
+        content: "modified content\n"
+      check_mode: true
+      diff: true
+      register: check_result
+
+    - name: Run directory in check mode for non-existent dir
+      linsomniac.fsbuilder.fsbuilder:
+        dest: "{{ test_dir }}/check_dir"
+        state: directory
+      check_mode: true
+      register: dir_check_result
+
+    - name: Save check mode results for verification
+      ansible.builtin.copy:
+        content: |
+          copy_changed={{ check_result.changed }}
+          dir_changed={{ dir_check_result.changed }}
+        dest: "{{ test_dir }}/check_results.txt"

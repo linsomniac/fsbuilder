@@ -1,0 +1,137 @@
+---
+- name: Verify - confirm all fsbuilder states produced correct results
+  hosts: all
+  gather_facts: false
+  vars:
+    test_dir: /tmp/fsb_test
+  tasks:
+    - name: Check directory exists with correct mode
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app"
+      register: dir_stat
+
+    - name: Assert directory properties
+      ansible.builtin.assert:
+        that:
+          - dir_stat.stat.exists
+          - dir_stat.stat.isdir
+          - dir_stat.stat.mode == "0755"
+
+    - name: Read content.txt
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/app/content.txt"
+      register: content_file
+
+    - name: Assert content.txt has correct content
+      ansible.builtin.assert:
+        that:
+          - "'known content string' in (content_file.content | b64decode)"
+
+    - name: Read static.txt
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/app/static.txt"
+      register: static_file
+
+    - name: Assert static.txt has correct content
+      ansible.builtin.assert:
+        that:
+          - "'static file from the controller' in (static_file.content | b64decode)"
+
+    - name: Read template.txt
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/app/template.txt"
+      register: template_file
+
+    - name: Assert template.txt was rendered
+      ansible.builtin.assert:
+        that:
+          - "'Hello from fsbuilder' in (template_file.content | b64decode)"
+
+    - name: Read inline_template.txt
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/app/inline_template.txt"
+      register: inline_template_file
+
+    - name: Assert inline template was rendered
+      ansible.builtin.assert:
+        that:
+          - "'Rendered: Hello from fsbuilder' in (inline_template_file.content | b64decode)"
+
+    - name: Check symlink
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app/link_to_content"
+      register: symlink_stat
+
+    - name: Assert symlink points to correct target
+      ansible.builtin.assert:
+        that:
+          - symlink_stat.stat.islnk
+          - symlink_stat.stat.lnk_target == test_dir + "/app/content.txt"
+
+    - name: Check hard link inode
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app/hard_to_content"
+      register: hard_stat
+
+    - name: Check original file inode
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app/content.txt"
+      register: orig_stat
+
+    - name: Assert hard link has same inode as source
+      ansible.builtin.assert:
+        that:
+          - hard_stat.stat.inode == orig_stat.stat.inode
+
+    - name: Check ensured.txt exists
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app/ensured.txt"
+      register: ensured_stat
+
+    - name: Assert ensured file exists
+      ansible.builtin.assert:
+        that:
+          - ensured_stat.stat.exists
+
+    - name: Check touched.txt exists
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app/touched.txt"
+      register: touched_stat
+
+    - name: Assert touched file exists
+      ansible.builtin.assert:
+        that:
+          - touched_stat.stat.exists
+
+    - name: Check absent file does not exist
+      ansible.builtin.stat:
+        path: "{{ test_dir }}/app/to_remove.txt"
+      register: absent_stat
+
+    - name: Assert absent file is gone
+      ansible.builtin.assert:
+        that:
+          - not absent_stat.stat.exists
+
+    - name: Read config.ini for lineinfile check
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/app/config.ini"
+      register: config_file
+
+    - name: Assert lineinfile modification present
+      ansible.builtin.assert:
+        that:
+          - "'key3=value3' in (config_file.content | b64decode)"
+
+    - name: Read block_config.txt for blockinfile check
+      ansible.builtin.slurp:
+        src: "{{ test_dir }}/app/block_config.txt"
+      register: block_file
+
+    - name: Assert blockinfile markers and content present
+      ansible.builtin.assert:
+        that:
+          - "'# BEGIN MANAGED BLOCK' in (block_file.content | b64decode)"
+          - "'added_key1=foo' in (block_file.content | b64decode)"
+          - "'added_key2=bar' in (block_file.content | b64decode)"
+          - "'# END MANAGED BLOCK' in (block_file.content | b64decode)"
