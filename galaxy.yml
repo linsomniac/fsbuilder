@@ -1,0 +1,23 @@
+---
+namespace: aix
+name: fsbuilder
+version: 0.1.0
+readme: README.md
+authors:
+  - Sean
+description: >-
+  Ansible module that consolidates multiple filesystem operations
+  (template, copy, mkdir, touch, rm, symlink, hardlink, lineinfile,
+  blockinfile) into a single task.
+license:
+  - MIT
+tags:
+  - filesystem
+  - template
+  - copy
+  - file
+  - lineinfile
+  - blockinfile
+dependencies:
+  ansible.builtin: ">=2.15.0"
+repository: https://github.com/aix/fsbuilder

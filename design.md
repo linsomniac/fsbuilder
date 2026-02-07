@@ -236,15 +236,15 @@ filesystem operations.
 
 ### Checklist
 
-- [ ] Create `galaxy.yml` with collection metadata (`namespace: aix`,
+- [X] Create `galaxy.yml` with collection metadata (`namespace: aix`,
       `name: fsbuilder`, `version: 0.1.0`, ansible-core >= 2.15 dependency)
-- [ ] Create `pyproject.toml` with dev dependencies:
+- [X] Create `pyproject.toml` with dev dependencies:
   - pytest, pytest-cov, pytest-mock
   - ruff (formatting/linting)
   - mypy
   - molecule, molecule-plugins[docker]
   - ansible-core >= 2.15
-- [ ] Create `plugins/modules/fsbuilder.py` with:
+- [X] Create `plugins/modules/fsbuilder.py` with:
   - `DOCUMENTATION`, `EXAMPLES`, `RETURN` docstrings (Ansible standard)
   - `argument_spec` covering all parameters from the spec
   - `mutually_exclusive=[('content', 'src'), ('insertafter', 'insertbefore')]`
@@ -256,27 +256,27 @@ filesystem operations.
   - Result aggregation logic: build `items` list, compute `changed_count`,
     `ok_count`, `skipped_count`, `failed_count`
   - `on_error` handling: `fail` (immediate) vs `continue` (accumulate)
-- [ ] Create `plugins/action/fsbuilder.py` as a pass-through stub:
+- [X] Create `plugins/action/fsbuilder.py` as a pass-through stub:
   - Subclass `ActionBase`, set `TRANSFERS_FILES = True`
   - `run()` method that calls `self._execute_module()` with unmodified args
   - Placeholder for loop parameter merging
-- [ ] Create `plugins/module_utils/fsbuilder_common.py` with shared constants:
+- [X] Create `plugins/module_utils/fsbuilder_common.py` with shared constants:
   - `VALID_STATES` list
   - `FILE_CONTENT_STATES` (states that produce file content)
   - `NO_VALIDATE_STATES` (states where validate is ignored)
-- [ ] Create role symlinks:
+- [X] Create role symlinks:
   - `roles/fsbuilder/action_plugins/fsbuilder.py` -> symlink
   - `roles/fsbuilder/library/fsbuilder.py` -> symlink
   - `roles/fsbuilder/meta/main.yml`
-- [ ] Create `tests/unit/conftest.py` with shared fixtures:
+- [X] Create `tests/unit/conftest.py` with shared fixtures:
   - `set_module_args()` fixture (injects `_ANSIBLE_ARGS`)
   - `AnsibleExitJson` / `AnsibleFailJson` exception classes
   - `monkeypatch` of `exit_json` / `fail_json`
-- [ ] Verify the skeleton: write a minimal unit test that instantiates the
+- [X] Verify the skeleton: write a minimal unit test that instantiates the
       module with `state: directory` and `dest: /tmp/test` and asserts it
       returns a result dict without error
-- [ ] Run `ruff format` and `ruff check` on all Python files
-- [ ] Run `mypy` on all Python files
+- [X] Run `ruff format` and `ruff check` on all Python files
+- [X] Run `mypy` on all Python files
 
 ---
 
@@ -289,7 +289,7 @@ cooperation.
 ### Checklist
 
 #### `state: directory`
-- [ ] Implement `_handle_directory()`:
+- [X] Implement `_handle_directory()`:
   - Strip trailing slash from `dest`
   - If `dest` exists and is a directory: return `changed=False`
   - If `dest` exists and is NOT a directory:
@@ -300,11 +300,11 @@ cooperation.
     children via `set_fs_attributes_if_different()`
   - Check mode: report what would happen without changes
   - Apply `set_fs_attributes_if_different()` on the directory itself
-- [ ] Handle `makedirs` parameter (create parent dirs) -- extract as shared
+- [X] Handle `makedirs` parameter (create parent dirs) -- extract as shared
       `_makedirs()` method since multiple handlers need it
 
 #### `state: exists`
-- [ ] Implement `_handle_exists()`:
+- [X] Implement `_handle_exists()`:
   - If `dest` exists as a file: return `changed=False`
   - If `dest` exists as non-file: fail (or force-remove if `force=True`)
   - If `dest` does not exist: create empty file
@@ -312,7 +312,7 @@ cooperation.
   - Check mode support
 
 #### `state: touch`
-- [ ] Implement `_handle_touch()`:
+- [X] Implement `_handle_touch()`:
   - Create file if it doesn't exist
   - Parse `access_time` / `modification_time` (epoch seconds or datetime string)
   - `os.utime(dest, times=(...))` to set timestamps
@@ -321,7 +321,7 @@ cooperation.
   - Check mode: return `changed=True` without touching
 
 #### `state: absent`
-- [ ] Implement `_handle_absent()`:
+- [X] Implement `_handle_absent()`:
   - Check for glob characters in `os.path.basename(dest)`
   - If glob: `glob.glob(dest)`, remove all matches
   - If no glob: check if `dest` exists, `shutil.rmtree()` for dirs,
@@ -331,7 +331,7 @@ cooperation.
   - Check mode: report what would be removed
 
 #### `state: link`
-- [ ] Implement `_handle_link()`:
+- [X] Implement `_handle_link()`:
   - If `dest` is already a symlink pointing to `src`: `changed=False`
   - If `dest` exists but is wrong type/target:
     - `force=True`: remove and recreate
@@ -341,7 +341,7 @@ cooperation.
   - Check mode support
 
 #### `state: hard`
-- [ ] Implement `_handle_hard()`:
+- [X] Implement `_handle_hard()`:
   - Check if `dest` exists and has the same inode as `src`
   - If same inode: `changed=False`
   - Otherwise: `os.link(src, dest)` (handle force/backup)
@@ -349,7 +349,7 @@ cooperation.
   - Check mode support
 
 #### `state: copy` (content-based writes from module perspective)
-- [ ] Implement `_handle_copy()`:
+- [X] Implement `_handle_copy()`:
   - **With `content`:** atomic write to temp file, compare with existing,
     validate, move into place
   - **With `src` (remote path, from action plugin transfer):** compare
@@ -361,24 +361,24 @@ cooperation.
   - Apply attributes after write
 
 #### Shared helpers
-- [ ] Implement `_write_content(dest, content, item)`:
+- [X] Implement `_write_content(dest, content, item)`:
   - Write to `tempfile.NamedTemporaryFile` in same directory as `dest`
   - If `validate`: run validation command against temp file
   - If `backup`: create backup of existing file
   - `module.atomic_move(tmp, dest)` for safe placement
-- [ ] Implement `_validate_file(tmp_path, validate_cmd)`:
+- [X] Implement `_validate_file(tmp_path, validate_cmd)`:
   - Require `%s` in validate command
   - `module.run_command(cmd % tmp_path)`
   - On failure: clean up temp file, fail with rc/stdout/stderr
-- [ ] Implement `_apply_attributes(path, item, changed)`:
+- [X] Implement `_apply_attributes(path, item, changed)`:
   - Build `file_args` dict from per-item parameters
   - Call `module.set_fs_attributes_if_different(file_args, changed)`
   - Return updated `changed` value
-- [ ] Implement `_check_creates_removes(item)`:
+- [X] Implement `_check_creates_removes(item)`:
   - If `creates` is set and path exists: return skip result
   - If `removes` is set and path does NOT exist: return skip result
   - Otherwise: return `None` (proceed normally)
-- [ ] Run `ruff format`, `ruff check`, and `mypy` on all modified files
+- [X] Run `ruff format`, `ruff check`, and `mypy` on all modified files
 
 ---
 
@@ -455,7 +455,7 @@ counterparts.
 ### Checklist
 
 #### `state: lineinfile`
-- [ ] Implement `_handle_lineinfile()`:
+- [X] Implement `_handle_lineinfile()`:
   - Read existing file content into lines list
   - Validate: `line` required when `line_state=present`
   - **`line_state: present`:**
@@ -476,7 +476,7 @@ counterparts.
   - Atomic write via `_write_content()` (supports validate)
   - Diff support: before/after file content
   - Check mode support
-- [ ] Handle edge cases:
+- [X] Handle edge cases:
   - File does not exist: create it (with the line) for `present`,
     no change for `absent`
   - Empty file
@@ -484,7 +484,7 @@ counterparts.
   - `regexp` that matches multiple lines (only replace last match)
 
 #### `state: blockinfile`
-- [ ] Implement `_handle_blockinfile()`:
+- [X] Implement `_handle_blockinfile()`:
   - Read existing file content
   - Validate: `block` required when `block_state=present`
   - Build marker lines: `marker.replace('{mark}', marker_begin)` and
@@ -503,13 +503,13 @@ counterparts.
   - Atomic write via `_write_content()` (supports validate)
   - Diff support
   - Check mode support
-- [ ] Handle edge cases:
+- [X] Handle edge cases:
   - File does not exist: create with block for `present`,
     no change for `absent`
   - Markers present but no content between them
   - Multiple marker pairs (only operate on first pair)
   - Block content with/without trailing newline
-- [ ] Run `ruff format`, `ruff check`, and `mypy`
+- [X] Run `ruff format`, `ruff check`, and `mypy`
 
 ---
 

@@ -1,0 +1,39 @@
+[project]
+name = "aix-fsbuilder"
+version = "0.1.0"
+description = "Ansible filesystem operations module"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-cov>=4.0",
+    "pytest-mock>=3.0",
+    "ruff>=0.4.0",
+    "mypy>=1.0",
+    "ansible-core>=2.15",
+]
+integration = [
+    "molecule>=6.0",
+    "molecule-plugins[docker]>=23.0",
+]
+
+[tool.ruff]
+target-version = "py39"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "SIM"]
+
+[tool.mypy]
+python_version = "3.13"
+warn_return_any = true
+warn_unused_configs = true
+ignore_missing_imports = true
+explicit_package_bases = true
+mypy_path = "."
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-v"
