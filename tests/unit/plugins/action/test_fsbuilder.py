@@ -318,3 +318,203 @@ class TestRunDispatch:
         call_args = action_module._execute_module.call_args
         assert call_args.kwargs["module_args"]["state"] == "copy"
         assert call_args.kwargs["module_args"]["content"] == "hello"
+
+
+class TestWhenEvaluation:
+    """Test per-item 'when' condition evaluation."""
+
+    def test_when_true_executes_module(self, action_module: ActionModule) -> None:
+        """When expression evaluates to True: module is executed."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "when": "True",
+        }
+        action_module._task.loop = None
+        action_module._templar.do_template.return_value = "True"
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        result = action_module.run(task_vars={})
+
+        action_module._execute_module.assert_called_once()
+        assert result == {"changed": True}
+
+    def test_when_false_skips_module(self, action_module: ActionModule) -> None:
+        """When expression evaluates to False: module is skipped."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "when": "False",
+        }
+        action_module._task.loop = None
+        action_module._templar.do_template.return_value = "False"
+        action_module._execute_module = MagicMock()
+
+        result = action_module.run(task_vars={})
+
+        action_module._execute_module.assert_not_called()
+        assert result["skipped"] is True
+        assert result["changed"] is False
+
+    def test_when_has_access_to_task_vars(self, action_module: ActionModule) -> None:
+        """When expression can access task_vars."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "when": "my_var == 'yes'",
+        }
+        action_module._task.loop = None
+        action_module._templar.do_template.return_value = "True"
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        result = action_module.run(task_vars={"my_var": "yes"})
+
+        action_module._execute_module.assert_called_once()
+        assert result["changed"] is True
+
+    def test_when_evaluation_error_raises(self, action_module: ActionModule) -> None:
+        """When expression evaluation error produces clear failure."""
+        from ansible.errors import AnsibleError
+
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "when": "undefined_var",
+        }
+        action_module._task.loop = None
+        action_module._templar.do_template.side_effect = Exception("undefined")
+
+        with pytest.raises(AnsibleError, match="when.*evaluation failed"):
+            action_module.run(task_vars={})
+
+    def test_when_not_passed_to_module(self, action_module: ActionModule) -> None:
+        """'when' is stripped from module_args before passing to module."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "when": "True",
+        }
+        action_module._task.loop = None
+        action_module._templar.do_template.return_value = "True"
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        call_args = action_module._execute_module.call_args
+        assert "when" not in call_args.kwargs["module_args"]
+
+    def test_evaluate_when_boolean_coercion(self, action_module: ActionModule) -> None:
+        """Boolean string values are properly coerced."""
+        action_module._templar.do_template.return_value = "yes"
+        assert action_module._evaluate_when("some_expr", {}) is True
+
+        action_module._templar.do_template.return_value = "no"
+        assert action_module._evaluate_when("some_expr", {}) is False
+
+        action_module._templar.do_template.return_value = ""
+        assert action_module._evaluate_when("some_expr", {}) is False
+
+        action_module._templar.do_template.return_value = True
+        assert action_module._evaluate_when("some_expr", {}) is True
+
+        action_module._templar.do_template.return_value = False
+        assert action_module._evaluate_when("some_expr", {}) is False
+
+
+class TestHandlerNotification:
+    """Test per-item handler notification collection."""
+
+    def test_notify_collected_when_changed(self, action_module: ActionModule) -> None:
+        """Per-item notify is collected when item changed."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "notify": "restart myapp",
+        }
+        action_module._task.loop = None
+        action_module._task.notify = None
+        action_module._templar.do_template.return_value = "True"
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        assert "restart myapp" in action_module._task.notify
+
+    def test_notify_not_collected_when_not_changed(self, action_module: ActionModule) -> None:
+        """Per-item notify is NOT collected when item did not change."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "notify": "restart myapp",
+        }
+        action_module._task.loop = None
+        action_module._task.notify = None
+        action_module._execute_module = MagicMock(return_value={"changed": False})
+
+        action_module.run(task_vars={})
+
+        # notify should remain None (not set)
+        assert action_module._task.notify is None
+
+    def test_notify_as_list(self, action_module: ActionModule) -> None:
+        """Per-item notify can be a list of handler names."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "notify": ["restart myapp", "reload nginx"],
+        }
+        action_module._task.loop = None
+        action_module._task.notify = None
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        assert "restart myapp" in action_module._task.notify
+        assert "reload nginx" in action_module._task.notify
+
+    def test_notify_merged_with_task_notify(self, action_module: ActionModule) -> None:
+        """Per-item notify is merged with existing task-level notify."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "notify": "restart myapp",
+        }
+        action_module._task.loop = None
+        action_module._task.notify = ["reload config"]
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        assert "reload config" in action_module._task.notify
+        assert "restart myapp" in action_module._task.notify
+
+    def test_notify_deduplicates(self, action_module: ActionModule) -> None:
+        """Duplicate handler names are deduplicated."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "notify": "restart myapp",
+        }
+        action_module._task.loop = None
+        action_module._task.notify = ["restart myapp"]
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        assert action_module._task.notify.count("restart myapp") == 1
+
+    def test_notify_not_passed_to_module(self, action_module: ActionModule) -> None:
+        """'notify' is stripped from module_args before passing to module."""
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "notify": "restart myapp",
+        }
+        action_module._task.loop = None
+        action_module._task.notify = None
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        action_module.run(task_vars={})
+
+        call_args = action_module._execute_module.call_args
+        assert "notify" not in call_args.kwargs["module_args"]

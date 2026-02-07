@@ -25,8 +25,8 @@ class ActionModule(ActionBase):
     1. Loop parameter merging (item values override task defaults)
     2. Template rendering (file-based and inline)
     3. Copy file transfer (controller -> remote)
-    4. Per-item 'when' evaluation (Phase 5)
-    5. Per-item handler notification collection (Phase 5)
+    4. Per-item 'when' evaluation
+    5. Per-item handler notification collection
     """
 
     TRANSFERS_FILES = True
@@ -41,7 +41,22 @@ class ActionModule(ActionBase):
         # Step 1: Merge loop parameters
         module_args = self._merge_loop_params(task_vars)
 
-        # Step 2: Determine effective state and preprocess
+        # Step 2: Evaluate per-item 'when' condition
+        # AIDEV-NOTE: Per-item 'when' is a fsbuilder-specific parameter that
+        # allows conditional execution within loop items. This is separate from
+        # Ansible's native task-level 'when' which is handled by the executor.
+        when_expr = module_args.pop("when", None)
+        if when_expr is not None and not self._evaluate_when(when_expr, task_vars):
+            return {
+                "changed": False,
+                "skipped": True,
+                "skip_reason": f"Per-item when condition evaluated to False: {when_expr}",
+            }
+
+        # Step 3: Extract per-item notify before passing to module
+        item_notify = module_args.pop("notify", None)
+
+        # Step 4: Determine effective state and preprocess
         state = module_args.get("state", "template")
 
         try:
@@ -55,12 +70,15 @@ class ActionModule(ActionBase):
         except Exception as e:
             raise AnsibleError(f"fsbuilder action plugin error: {e}") from e
 
-        # Step 3: Execute the module on the remote host
+        # Step 5: Execute the module on the remote host
         result: dict[str, Any] = self._execute_module(
             module_name="fsbuilder",
             module_args=module_args,
             task_vars=task_vars,
         )
+
+        # Step 6: Collect per-item handler notifications
+        self._collect_notifications(result, item_notify)
 
         return result
 
@@ -298,3 +316,77 @@ class ActionModule(ActionBase):
         args["src"] = tmp_src
 
         return args
+
+    def _evaluate_when(self, when_expr: str, task_vars: dict[str, Any]) -> bool:
+        """Evaluate a per-item 'when' condition.
+
+        AIDEV-NOTE: This evaluates when expressions using Ansible's Templar,
+        similar to how the task executor evaluates task-level 'when'. The
+        expression is wrapped in Jinja2 {{ }} if not already wrapped, then
+        the result is coerced to boolean.
+
+        Returns True if the item should be executed, False if it should be skipped.
+        """
+        self._templar.available_variables = task_vars
+
+        try:
+            # Wrap in Jinja2 if not already an expression
+            expr = when_expr
+            if not expr.startswith("{{"):
+                expr = "{{ " + expr + " }}"
+
+            result = self._templar.do_template(expr)
+
+            # Boolean coercion: handle string representations
+            if isinstance(result, bool):
+                return result
+            if isinstance(result, str):
+                lower = result.strip().lower()
+                if lower in ("true", "yes", "1"):
+                    return True
+                if lower in ("false", "no", "0", ""):
+                    return False
+            # For non-empty values, treat as truthy
+            return bool(result)
+
+        except Exception as e:
+            raise AnsibleError(
+                f"fsbuilder: per-item 'when' evaluation failed for expression '{when_expr}': {e}"
+            ) from e
+
+    def _collect_notifications(self, result: dict[str, Any], item_notify: Any) -> None:
+        """Collect per-item handler notifications and merge into task notify.
+
+        AIDEV-NOTE: This merges per-item notify values with the task-level
+        notify list. Only items that actually changed trigger notifications.
+        The task executor reads self._task.notify after the action plugin
+        returns to determine which handlers to notify.
+        """
+        if item_notify is None:
+            return
+
+        # Only notify if the item actually changed
+        if not result.get("changed", False):
+            return
+
+        # Normalize notify to a list
+        if isinstance(item_notify, str):
+            notify_list = [item_notify]
+        elif isinstance(item_notify, list):
+            notify_list = item_notify
+        else:
+            return
+
+        # Get existing task-level notify (may be None, str, or list)
+        task_notify = getattr(self._task, "notify", None) or []
+        if isinstance(task_notify, str):
+            task_notify = [task_notify]
+
+        # Merge and deduplicate while preserving order
+        merged: list[str] = list(task_notify)
+        for handler in notify_list:
+            if handler not in merged:
+                merged.append(handler)
+
+        # Update task notify
+        self._task.notify = merged

@@ -521,33 +521,33 @@ per-item handler notification.
 ### Checklist
 
 #### Per-Item `when` Evaluation
-- [ ] Implement `_evaluate_when(when_expr, task_vars)` in the action plugin:
+- [X] Implement `_evaluate_when(when_expr, task_vars)` in the action plugin:
   - Use `self._templar` with `task_vars` to evaluate the expression
   - Wrap the expression in Jinja2: `{{ when_expr }}`
   - Handle boolean coercion (string "true"/"false", empty strings, etc.)
   - Handle evaluation errors gracefully (fail with clear message)
-- [ ] Integrate `when` into `run()`:
+- [X] Integrate `when` into `run()`:
   - After merging loop params, check if `when` is present
   - If present: evaluate against current `task_vars`
   - If `False`: skip the module execution entirely, return a skip result
     with `skipped=True` and `skip_reason`
   - If `True`: proceed normally
-- [ ] Ensure `creates`/`removes` are evaluated on the remote host (these
+- [X] Ensure `creates`/`removes` are evaluated on the remote host (these
       stay in the module since they check remote path existence)
 
 #### Per-Item Handler Notification
-- [ ] Implement `_collect_notifications(result)` in the action plugin:
+- [X] Implement `_collect_notifications(result)` in the action plugin:
   - After `_execute_module()` returns, inspect the result
   - Check if the item had a per-item `notify` parameter
   - If the item `changed` and has `notify`: collect the handler name(s)
-- [ ] Merge notifications into `self._task.notify`:
+- [X] Merge notifications into `self._task.notify`:
   - Combine task-level `notify` with per-item `notify` values
   - Only include handlers from items that actually changed
   - Deduplicate handler names
   - If nothing changed: clear `self._task.notify` to prevent spurious
     notifications
-- [ ] Handle `notify` as both string and list of strings
-- [ ] Run `ruff format`, `ruff check`, and `mypy`
+- [X] Handle `notify` as both string and list of strings
+- [X] Run `ruff format`, `ruff check`, and `mypy`
 
 ---
 
