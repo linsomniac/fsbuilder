@@ -1942,14 +1942,31 @@ class TestDirectoryModeOwnerGroup:
             "validate": None,
             "allow_unsafe_deletes": False,
         }
-        module.load_file_common_arguments.return_value = {"path": dest, "mode": "0755"}
-        module.set_fs_attributes_if_different.return_value = False
+        # AIDEV-NOTE: Must return a new dict each call since _apply_attributes
+        # mutates the returned dict (sets file_args["path"] = path).
+        module.load_file_common_arguments.side_effect = lambda p: {"path": dest, "mode": "0755"}
+        # Capture paths via a side effect since dicts get mutated after return
+        captured_paths: list[str] = []
+
+        def capture_attrs(file_args: dict[str, Any], changed: bool) -> bool:
+            captured_paths.append(file_args["path"])
+            return False
+
+        module.set_fs_attributes_if_different.side_effect = capture_attrs
 
         fsb = FSBuilder(module)
         fsb._handle_directory(module.params)
 
         # Should have been called for: dest dir, subdir, file1.txt, file2.txt
-        assert module.set_fs_attributes_if_different.call_count >= 4
+        assert len(captured_paths) >= 4
+        # Verify the exact set of paths that received attribute calls
+        expected_paths = {
+            dest,
+            os.path.join(dest, "subdir"),
+            os.path.join(dest, "file1.txt"),
+            os.path.join(dest, "subdir", "file2.txt"),
+        }
+        assert expected_paths == set(captured_paths)
 
 
 class TestAtomicWrite:
@@ -1979,7 +1996,13 @@ class TestBinaryDiffSuppression:
     """Tests for binary file detection suppressing diff."""
 
     def test_binary_file_diff_handled_gracefully(self, patch_module: None, tmp_path: Any) -> None:
-        """Binary content in existing file is handled gracefully in diff mode."""
+        """Binary content in existing file is handled gracefully in diff mode.
+
+        AIDEV-NOTE: The implementation uses errors='surrogateescape' to read
+        binary files, so the diff contains surrogate-escaped content rather than
+        crashing. The key assertion is that it produces a valid diff structure
+        with string values for both before and after.
+        """
         dest = str(tmp_path / "binary_test.bin")
         # Write binary content with null bytes
         with open(dest, "wb") as f:
@@ -2000,8 +2023,12 @@ class TestBinaryDiffSuppression:
 
         result = extract_result(exc_info.value)
         assert result["changed"] is True
-        # Diff should be present and not crash, even with binary before content
         assert "diff" in result
+        # Diff before should be a non-empty string (surrogate-escaped binary content)
+        assert isinstance(result["diff"]["before"], str)
+        assert len(result["diff"]["before"]) > 0
+        # Diff after should contain the new text content
+        assert result["diff"]["after"] == "new text content\n"
 
     def test_binary_src_diff_handled(self, patch_module: None, tmp_path: Any) -> None:
         """Binary source file diff is handled gracefully."""
@@ -2029,8 +2056,13 @@ class TestBinaryDiffSuppression:
 
         result = extract_result(exc_info.value)
         assert result["changed"] is True
-        # Should not crash - diff should exist
         assert "diff" in result
+        # Both before and after should be strings (surrogate-escaped binary)
+        assert isinstance(result["diff"]["before"], str)
+        assert isinstance(result["diff"]["after"], str)
+        # Content should contain the readable ASCII portions of the binary data
+        assert "old binary" in result["diff"]["before"]
+        assert "new binary" in result["diff"]["after"]
 
 
 class TestRemoteSrcCopy:
@@ -2419,3 +2451,69 @@ class TestValidateIgnoredForNonFileStates:
         result = extract_result(exc_info.value)
         assert result["changed"] is True
         assert os.path.isfile(dest)
+
+    def test_validate_warning_emitted_for_directory(
+        self, patch_module: None, tmp_path: Any
+    ) -> None:
+        """module.warn() is called when validate is set for state=directory."""
+        from plugins.modules.fsbuilder import FSBuilder
+
+        dest = str(tmp_path / "warn_dir")
+        os.makedirs(dest)
+
+        module = MagicMock()
+        module.check_mode = False
+        module._diff = False
+        module.params = {
+            "dest": dest,
+            "state": "directory",
+            "validate": "some_cmd %s",
+            "force": False,
+            "force_backup": False,
+            "makedirs": False,
+            "recurse": False,
+            "creates": None,
+            "removes": None,
+            "allow_unsafe_deletes": False,
+        }
+        module.load_file_common_arguments.return_value = {"path": dest}
+        module.set_fs_attributes_if_different.return_value = False
+
+        fsb = FSBuilder(module)
+        fsb.run()
+
+        module.warn.assert_called_once()
+        warn_msg = module.warn.call_args[0][0]
+        assert "validate" in warn_msg.lower()
+        assert "ignored" in warn_msg.lower()
+
+    def test_validate_warning_emitted_for_absent(self, patch_module: None, tmp_path: Any) -> None:
+        """module.warn() is called when validate is set for state=absent."""
+        from plugins.modules.fsbuilder import FSBuilder
+
+        dest = str(tmp_path / "warn_absent.txt")
+        with open(dest, "w") as f:
+            f.write("content")
+
+        module = MagicMock()
+        module.check_mode = False
+        module._diff = False
+        module.params = {
+            "dest": dest,
+            "state": "absent",
+            "validate": "some_cmd %s",
+            "force": False,
+            "force_backup": False,
+            "makedirs": False,
+            "creates": None,
+            "removes": None,
+            "allow_unsafe_deletes": False,
+        }
+
+        fsb = FSBuilder(module)
+        fsb.run()
+
+        module.warn.assert_called_once()
+        warn_msg = module.warn.call_args[0][0]
+        assert "validate" in warn_msg.lower()
+        assert "ignored" in warn_msg.lower()

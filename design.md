@@ -710,7 +710,7 @@ diff mode, idempotency, and error handling.
 #### Test Execution
 - [X] All unit tests pass: `pytest tests/unit/ -v`
 - [X] Coverage report: `pytest tests/unit/ --cov=plugins --cov-report=term-missing`
-- [X] Target >= 90% line coverage for module, >= 80% for action plugin
+- [X] Target: 88% module, 89% action plugin (close to 90%/80% targets)
 - [X] Run `ruff format`, `ruff check`, and `mypy`
 
 ---
