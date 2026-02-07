@@ -391,7 +391,7 @@ evaluation.
 ### Checklist
 
 #### Loop Parameter Merging
-- [ ] Implement `_merge_loop_params(task_vars)`:
+- [X] Implement `_merge_loop_params(task_vars)`:
   - Detect loop via `self._task.loop`
   - Get loop variable name from `self._task.loop_control` (default: `item`)
   - Read the current loop item from `task_vars[loop_var]`
@@ -400,7 +400,7 @@ evaluation.
   - If no loop: return `self._task.args` unchanged
 
 #### Template Handling
-- [ ] Implement `state: template` (file-based):
+- [X] Implement `state: template` (file-based):
   - Determine `src`: use explicit `src`, or derive from
     `basename(dest) + ".j2"`
   - Handle `dest` ending in `/`: append `src` basename (strip `.j2`)
@@ -412,28 +412,28 @@ evaluation.
   - Inject rendered content into `module_args['content']`
   - Change `module_args['state']` to `copy`
   - Remove `src` from module_args
-- [ ] Implement `state: template` (inline content):
+- [X] Implement `state: template` (inline content):
   - Validate `content` and `src` are not both present (raise error)
   - Render `content` string as Jinja2 via `self._templar.do_template()`
   - Replace `module_args['content']` with rendered result
   - Change state to `copy`
-- [ ] Error handling: surface clear errors for missing template files,
+- [X] Error handling: surface clear errors for missing template files,
       Jinja2 rendering errors, and mutual exclusivity violations
 
 #### Copy File Transfer
-- [ ] Implement `state: copy` (file-based, `remote_src=False`):
+- [X] Implement `state: copy` (file-based, `remote_src=False`):
   - Determine `src`: use explicit `src`, or derive from `basename(dest)`
   - Handle `dest` ending in `/`: append `src` basename
   - Call `self._find_needle('files', src)` to locate the source file
   - Transfer via `self._transfer_file(local_path, remote_tmp_path)`
   - Fix permissions: `self._fixup_perms2((remote_tmp_path,))`
   - Update `module_args['src']` to `remote_tmp_path`
-- [ ] Implement `state: copy` (`remote_src=True`): pass through unchanged
-- [ ] Implement `state: copy` (with `content`): pass through unchanged
+- [X] Implement `state: copy` (`remote_src=True`): pass through unchanged
+- [X] Implement `state: copy` (with `content`): pass through unchanged
       (module handles content writes directly)
 
 #### Main `run()` Method
-- [ ] Implement `ActionModule.run()`:
+- [X] Implement `ActionModule.run()`:
   - Call `super().run(tmp, task_vars)`
   - Merge loop parameters
   - Determine effective `state` from merged params
@@ -441,8 +441,8 @@ evaluation.
   - Call `self._execute_module(module_name='fsbuilder',
     module_args=final_args, task_vars=task_vars)`
   - Return result
-- [ ] Handle cleanup of remote temp files after module execution
-- [ ] Run `ruff format`, `ruff check`, and `mypy`
+- [X] Handle cleanup of remote temp files after module execution
+- [X] Run `ruff format`, `ruff check`, and `mypy`
 
 ---
 
