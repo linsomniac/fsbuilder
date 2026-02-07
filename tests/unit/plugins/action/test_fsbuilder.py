@@ -420,6 +420,27 @@ class TestWhenEvaluation:
         action_module._templar.do_template.return_value = False
         assert action_module._evaluate_when("some_expr", {}) is False
 
+    def test_when_bool_true_shortcircuits(self, action_module: ActionModule) -> None:
+        """Boolean True value short-circuits without Templar evaluation."""
+        assert action_module._evaluate_when(True, {}) is True
+        action_module._templar.do_template.assert_not_called()
+
+    def test_when_bool_false_shortcircuits(self, action_module: ActionModule) -> None:
+        """Boolean False value short-circuits without Templar evaluation."""
+        assert action_module._evaluate_when(False, {}) is False
+        action_module._templar.do_template.assert_not_called()
+
+    def test_when_list_and_evaluates_all(self, action_module: ActionModule) -> None:
+        """List of when expressions are AND-evaluated."""
+        # Both True -> True
+        action_module._templar.do_template.return_value = "True"
+        assert action_module._evaluate_when(["expr1", "expr2"], {}) is True
+
+    def test_when_list_short_circuits_on_false(self, action_module: ActionModule) -> None:
+        """List of when expressions short-circuits on first False."""
+        action_module._templar.do_template.side_effect = ["True", "False"]
+        assert action_module._evaluate_when(["expr1", "expr2"], {}) is False
+
 
 class TestHandlerNotification:
     """Test per-item handler notification collection."""
@@ -438,6 +459,7 @@ class TestHandlerNotification:
 
         action_module.run(task_vars={})
 
+        assert action_module._task.notify is not None
         assert "restart myapp" in action_module._task.notify
 
     def test_notify_not_collected_when_not_changed(self, action_module: ActionModule) -> None:
@@ -469,6 +491,7 @@ class TestHandlerNotification:
 
         action_module.run(task_vars={})
 
+        assert action_module._task.notify is not None
         assert "restart myapp" in action_module._task.notify
         assert "reload nginx" in action_module._task.notify
 
@@ -518,3 +541,19 @@ class TestHandlerNotification:
 
         call_args = action_module._execute_module.call_args
         assert "notify" not in call_args.kwargs["module_args"]
+
+    def test_notify_invalid_type_raises(self, action_module: ActionModule) -> None:
+        """Invalid notify type raises AnsibleError."""
+        from ansible.errors import AnsibleError
+
+        action_module._task.args = {
+            "dest": "/etc/file.txt",
+            "state": "directory",
+            "notify": 42,
+        }
+        action_module._task.loop = None
+        action_module._task.notify = None
+        action_module._execute_module = MagicMock(return_value={"changed": True})
+
+        with pytest.raises(AnsibleError, match="notify.*must be a string or list"):
+            action_module.run(task_vars={})

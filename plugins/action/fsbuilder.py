@@ -50,7 +50,7 @@ class ActionModule(ActionBase):
             return {
                 "changed": False,
                 "skipped": True,
-                "skip_reason": f"Per-item when condition evaluated to False: {when_expr}",
+                "skip_reason": "Per-item when condition evaluated to False",
             }
 
         # Step 3: Extract per-item notify before passing to module
@@ -317,21 +317,30 @@ class ActionModule(ActionBase):
 
         return args
 
-    def _evaluate_when(self, when_expr: str, task_vars: dict[str, Any]) -> bool:
+    def _evaluate_when(self, when_expr: bool | str | list[str], task_vars: dict[str, Any]) -> bool:
         """Evaluate a per-item 'when' condition.
 
         AIDEV-NOTE: This evaluates when expressions using Ansible's Templar,
-        similar to how the task executor evaluates task-level 'when'. The
-        expression is wrapped in Jinja2 {{ }} if not already wrapped, then
-        the result is coerced to boolean.
+        similar to how the task executor evaluates task-level 'when'. Accepts:
+        - bool: short-circuit (when: true / when: false in YAML)
+        - str: evaluate as Jinja2 expression
+        - list[str]: AND-evaluate all expressions (Ansible convention)
 
         Returns True if the item should be executed, False if it should be skipped.
         """
+        # Short-circuit for boolean values (YAML `when: true` / `when: false`)
+        if isinstance(when_expr, bool):
+            return when_expr
+
+        # List form: AND-evaluate all expressions (Ansible convention)
+        if isinstance(when_expr, list):
+            return all(self._evaluate_when(expr, task_vars) for expr in when_expr)
+
+        # String expression: evaluate via Templar
         self._templar.available_variables = task_vars
 
         try:
-            # Wrap in Jinja2 if not already an expression
-            expr = when_expr
+            expr = str(when_expr).strip()
             if not expr.startswith("{{"):
                 expr = "{{ " + expr + " }}"
 
@@ -350,8 +359,10 @@ class ActionModule(ActionBase):
             return bool(result)
 
         except Exception as e:
+            # Truncate expression in error messages to avoid leaking secrets
+            expr_display = str(when_expr)[:80]
             raise AnsibleError(
-                f"fsbuilder: per-item 'when' evaluation failed for expression '{when_expr}': {e}"
+                f"fsbuilder: per-item 'when' evaluation failed: {expr_display}: {e}"
             ) from e
 
     def _collect_notifications(self, result: dict[str, Any], item_notify: Any) -> None:
@@ -369,13 +380,23 @@ class ActionModule(ActionBase):
         if not result.get("changed", False):
             return
 
-        # Normalize notify to a list
+        # Normalize notify to a list with strict type validation
         if isinstance(item_notify, str):
             notify_list = [item_notify]
         elif isinstance(item_notify, list):
+            # Validate all elements are strings
+            for handler in item_notify:
+                if not isinstance(handler, str):
+                    raise AnsibleError(
+                        f"fsbuilder: 'notify' list elements must be strings, "
+                        f"got {type(handler).__name__}"
+                    )
             notify_list = item_notify
         else:
-            return
+            raise AnsibleError(
+                f"fsbuilder: 'notify' must be a string or list of strings, "
+                f"got {type(item_notify).__name__}"
+            )
 
         # Get existing task-level notify (may be None, str, or list)
         task_notify = getattr(self._task, "notify", None) or []
