@@ -1,0 +1,95 @@
+---
+# Demonstrates lineinfile and blockinfile states for in-place file editing
+- name: Manage configuration lines and blocks
+  hosts: all
+  become: true
+
+  vars:
+    dns_servers:
+      - 8.8.8.8
+      - 8.8.4.4
+    app_hosts:
+      - {ip: "192.168.1.10", name: "app1.internal"}
+      - {ip: "192.168.1.11", name: "app2.internal"}
+      - {ip: "192.168.1.12", name: "db1.internal"}
+
+  tasks:
+    - name: Harden SSH configuration
+      aix.fsbuilder.fsbuilder:
+        owner: root
+        group: root
+        mode: "0600"
+      loop:
+        # Replace existing line or append if not found
+        - dest: /etc/ssh/sshd_config
+          state: lineinfile
+          regexp: "^PermitRootLogin"
+          line: "PermitRootLogin no"
+          validate: "sshd -t -f %s"
+
+        - dest: /etc/ssh/sshd_config
+          state: lineinfile
+          regexp: "^PasswordAuthentication"
+          line: "PasswordAuthentication no"
+          validate: "sshd -t -f %s"
+
+        - dest: /etc/ssh/sshd_config
+          state: lineinfile
+          regexp: "^MaxAuthTries"
+          line: "MaxAuthTries 3"
+          validate: "sshd -t -f %s"
+      notify: restart sshd
+
+    - name: Add DNS servers to resolv.conf
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/resolv.conf
+        state: lineinfile
+        line: "nameserver {{ item }}"
+      loop: "{{ dns_servers }}"
+
+    - name: Manage /etc/hosts entries with a marked block
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/hosts
+        state: blockinfile
+        marker: "# {mark} ANSIBLE MANAGED - app hosts"
+        block: |
+          {% for host in app_hosts %}
+          {{ host.ip }} {{ host.name }}
+          {% endfor %}
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Insert a line before a specific pattern
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/security/limits.conf
+        state: lineinfile
+        line: "myapp soft nofile 65536"
+        insertbefore: "^# End of file"
+
+    - name: Insert a line after a specific pattern
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/sysctl.conf
+        state: lineinfile
+        line: "net.core.somaxconn = 65535"
+        insertafter: "^# Network"
+
+    - name: Remove a deprecated config line
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/myapp/config.ini
+        state: lineinfile
+        regexp: "^deprecated_setting"
+        line_state: absent
+
+    - name: Remove a managed block
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/hosts
+        state: blockinfile
+        marker: "# {mark} OLD MANAGED BLOCK"
+        block_state: absent
+
+  handlers:
+    - name: restart sshd
+      ansible.builtin.service:
+        name: sshd
+        state: restarted

@@ -1,0 +1,162 @@
+---
+# Full application deployment example showing fsbuilder replacing what would
+# typically require 15+ separate tasks with ansible.builtin modules.
+#
+# Compare this to the equivalent using individual modules:
+#   - ansible.builtin.file (x4 for directories)
+#   - ansible.builtin.template (x3 for templates)
+#   - ansible.builtin.copy (x2 for static files)
+#   - ansible.builtin.file (x2 for links)
+#   - ansible.builtin.lineinfile (x2 for config lines)
+#   - ansible.builtin.blockinfile (x1 for hosts block)
+#   - ansible.builtin.file (x2 for cleanup)
+#
+# With fsbuilder, it's a single task.
+- name: Deploy web application
+  hosts: webservers
+  become: true
+
+  vars:
+    app_name: webapp
+    app_version: "2.5.1"
+    app_port: 8080
+    app_user: www-data
+    app_group: www-data
+    db_host: db1.internal
+    db_port: 5432
+    log_level: info
+
+  tasks:
+    - name: Complete application deployment
+      aix.fsbuilder.fsbuilder:
+        owner: root
+        group: "{{ app_group }}"
+        mode: "0644"
+        on_error: continue
+      loop:
+        #
+        # --- Directories ---
+        #
+        - dest: /etc/{{ app_name }}
+          state: directory
+          mode: "0755"
+
+        - dest: /etc/{{ app_name }}/conf.d
+          state: directory
+          mode: "0755"
+
+        - dest: /var/log/{{ app_name }}
+          state: directory
+          owner: "{{ app_user }}"
+          group: "{{ app_group }}"
+          mode: "0775"
+
+        - dest: /var/run/{{ app_name }}
+          state: directory
+          owner: "{{ app_user }}"
+          group: "{{ app_group }}"
+          mode: "0755"
+
+        #
+        # --- Templates (rendered from .j2 files in templates/) ---
+        #
+        - dest: /etc/{{ app_name }}/app.conf
+          # default state=template, renders app.conf.j2
+          validate: "{{ app_name }} --validate %s"
+          backup: true
+          notify: restart webapp
+
+        - dest: /etc/{{ app_name }}/conf.d/database.conf
+          backup: true
+          notify: restart webapp
+
+        - dest: /etc/systemd/system/{{ app_name }}.service
+          notify: reload systemd
+
+        #
+        # --- Inline template (no .j2 file needed) ---
+        #
+        - dest: /etc/{{ app_name }}/version.txt
+          state: template
+          content: |
+            version={{ app_version }}
+            deployed={{ ansible_date_time.iso8601 }}
+            host={{ inventory_hostname }}
+
+        #
+        # --- Static files from controller ---
+        #
+        - dest: /etc/{{ app_name }}/cacerts.pem
+          state: copy
+          mode: "0600"
+
+        - dest: /etc/{{ app_name }}/banner.txt
+          state: copy
+
+        #
+        # --- Symlink to current release ---
+        #
+        - dest: /opt/{{ app_name }}/current
+          state: link
+          src: /opt/{{ app_name }}/releases/v{{ app_version }}
+
+        #
+        # --- System configuration (lineinfile) ---
+        #
+        - dest: /etc/security/limits.conf
+          state: lineinfile
+          line: "{{ app_user }} soft nofile 65536"
+          regexp: "^{{ app_user }}.*soft.*nofile"
+
+        - dest: /etc/security/limits.conf
+          state: lineinfile
+          line: "{{ app_user }} hard nofile 65536"
+          regexp: "^{{ app_user }}.*hard.*nofile"
+
+        #
+        # --- /etc/hosts entries (blockinfile) ---
+        #
+        - dest: /etc/hosts
+          state: blockinfile
+          marker: "# {mark} ANSIBLE MANAGED - {{ app_name }}"
+          block: |
+            {{ db_host.split('.')[0] | regex_replace('(.*)', '10.0.1.10 \\1') }} {{ db_host }}
+
+        #
+        # --- Deployment bookkeeping ---
+        #
+        - dest: /etc/{{ app_name }}/.last-deploy
+          state: touch
+
+        - dest: /etc/{{ app_name }}/.initialized
+          state: exists
+
+        #
+        # --- Conditional items ---
+        #
+        - dest: /etc/{{ app_name }}/conf.d/debug.conf
+          state: template
+          when: log_level == "debug"
+          notify: restart webapp
+
+        #
+        # --- Cleanup ---
+        #
+        - dest: /etc/{{ app_name }}/conf.d/*.rpmsave
+          state: absent
+
+        - dest: /etc/{{ app_name }}/conf.d/*.dpkg-old
+          state: absent
+
+        - dest: /etc/{{ app_name }}/legacy.conf
+          state: absent
+
+  handlers:
+    - name: reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: restart webapp
+      ansible.builtin.service:
+        name: "{{ app_name }}"
+        state: restarted

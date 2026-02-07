@@ -1,0 +1,66 @@
+---
+# Demonstrates loop with task-level defaults and per-item overrides.
+# This is the primary use case for fsbuilder: consolidating many filesystem
+# tasks into a single task with a loop.
+- name: Deploy application with loop
+  hosts: all
+  become: true
+
+  vars:
+    app_name: myapp
+    app_version: "2.1.0"
+    app_port: 8080
+
+  tasks:
+    - name: Deploy myapp configuration
+      aix.fsbuilder.fsbuilder:
+        # Task-level defaults apply to all items unless overridden
+        owner: root
+        group: "{{ app_name }}"
+        mode: "0644"
+      loop:
+        # Create directories (override mode for directories)
+        - dest: /etc/{{ app_name }}
+          state: directory
+          mode: "0755"
+
+        - dest: /etc/{{ app_name }}/conf.d
+          state: directory
+          mode: "0755"
+
+        - dest: /var/log/{{ app_name }}
+          state: directory
+          mode: "0775"
+
+        # Render templates (default state)
+        - dest: /etc/{{ app_name }}/config.ini
+          validate: "{{ app_name }} --check-config %s"
+          backup: true
+
+        - dest: /etc/{{ app_name }}/conf.d/logging.conf
+          backup: true
+
+        # Write literal content
+        - dest: /etc/{{ app_name }}/version.txt
+          state: copy
+          content: "{{ app_version }}"
+
+        # Copy a static file from the controller
+        - dest: /etc/{{ app_name }}/banner.txt
+          state: copy
+
+        # Symlink to current release
+        - dest: /opt/{{ app_name }}/current
+          state: link
+          src: /opt/{{ app_name }}/releases/v{{ app_version }}
+
+        # Mark deployment timestamp
+        - dest: /etc/{{ app_name }}/.last-deploy
+          state: touch
+
+        # Clean up stale config fragments
+        - dest: /etc/{{ app_name }}/conf.d/*.rpmsave
+          state: absent
+
+        - dest: /etc/{{ app_name }}/conf.d/*.bak
+          state: absent

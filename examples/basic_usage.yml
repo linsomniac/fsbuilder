@@ -1,0 +1,85 @@
+---
+# Basic fsbuilder usage - demonstrates each state individually
+- name: Basic fsbuilder examples
+  hosts: all
+  become: true
+
+  vars:
+    app_name: myapp
+    app_version: "1.2.3"
+
+  tasks:
+    - name: Create a directory
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}
+        state: directory
+        owner: root
+        group: root
+        mode: "0755"
+
+    - name: Write literal content to a file
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/version.txt
+        state: copy
+        content: "{{ app_version }}"
+        owner: root
+        group: root
+        mode: "0644"
+
+    - name: Copy a file from the controller (looks for static.dat in files/)
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/static.dat
+        state: copy
+        mode: "0644"
+
+    - name: Render a Jinja2 template (default state, looks for config.ini.j2 in templates/)
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/config.ini
+        # state: template is the default
+        owner: root
+        group: "{{ app_name }}"
+        mode: "0640"
+
+    - name: Render an inline template (no .j2 file needed)
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/build-info.txt
+        state: template
+        content: |
+          version={{ app_version }}
+          host={{ inventory_hostname }}
+          date={{ ansible_date_time.iso8601 }}
+        mode: "0644"
+
+    - name: Ensure a file exists (create empty if missing, leave alone if present)
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/.initialized
+        state: exists
+        mode: "0644"
+
+    - name: Touch a file (always updates timestamp)
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/.last-deploy
+        state: touch
+        mode: "0644"
+
+    - name: Create a symbolic link
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/current
+        state: link
+        src: /opt/{{ app_name }}/releases/v{{ app_version }}
+
+    - name: Create a hard link
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/config-link.ini
+        state: hard
+        src: /etc/{{ app_name }}/config.ini
+
+    - name: Remove a file
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/legacy.conf
+        state: absent
+
+    - name: Remove files matching a glob pattern
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/conf.d/*.rpmsave
+        state: absent

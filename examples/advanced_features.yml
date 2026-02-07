@@ -1,0 +1,87 @@
+---
+# Demonstrates advanced features: backup, validate, makedirs,
+# force, force_backup, remote_src, and custom markers
+- name: Advanced fsbuilder features
+  hosts: all
+  become: true
+
+  vars:
+    app_name: myapp
+    app_version: "3.0.0"
+
+  tasks:
+    - name: Deploy with backup and validation
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/sudoers.d/{{ app_name }}
+        state: copy
+        content: |
+          %{{ app_name }} ALL=(ALL) NOPASSWD: /usr/bin/systemctl restart {{ app_name }}
+        validate: "visudo -cf %s"
+        backup: true
+        owner: root
+        group: root
+        mode: "0440"
+
+    - name: Use makedirs to auto-create parent directories
+      aix.fsbuilder.fsbuilder:
+        owner: root
+        group: "{{ app_name }}"
+        mode: "0644"
+      loop:
+        # makedirs creates /opt/myapp/releases/v3.0.0/conf/ if missing
+        - dest: /opt/{{ app_name }}/releases/v{{ app_version }}/conf/app.ini
+          state: template
+          makedirs: true
+
+        # makedirs creates /var/lib/myapp/data/ if missing
+        - dest: /var/lib/{{ app_name }}/data/.gitkeep
+          state: exists
+          makedirs: true
+
+    - name: Force-replace a directory with a file
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/config
+        state: copy
+        content: "consolidated config\n"
+        # force removes the existing directory so a file can take its place
+        force: true
+        # force_backup renames the old path to config.old instead of deleting
+        force_backup: true
+
+    - name: Copy a file already on the remote host
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/config.ini.dist
+        src: /etc/{{ app_name }}/config.ini
+        state: copy
+        remote_src: true
+        # Only create the dist copy if it doesn't already exist
+        creates: /etc/{{ app_name }}/config.ini.dist
+
+    - name: Use custom block markers
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/nginx/conf.d/{{ app_name }}.conf
+        state: blockinfile
+        # Custom markers to fit nginx comment style
+        marker: "## {mark} {{ app_name | upper }} CONFIG"
+        marker_begin: "BEGIN"
+        marker_end: "END"
+        block: |
+          upstream {{ app_name }} {
+              server 127.0.0.1:8080;
+              server 127.0.0.1:8081;
+          }
+        notify: reload nginx
+
+    - name: Touch with specific timestamps
+      aix.fsbuilder.fsbuilder:
+        dest: /etc/{{ app_name }}/.migrated
+        state: touch
+        # Set specific access and modification times (epoch seconds)
+        access_time: "1700000000"
+        modification_time: "1700000000"
+
+  handlers:
+    - name: reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded

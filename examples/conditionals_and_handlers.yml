@@ -1,0 +1,94 @@
+---
+# Demonstrates per-item when conditions, creates/removes guards,
+# per-item notify, and on_error handling
+- name: Conditional deployment with error handling
+  hosts: all
+  become: true
+
+  vars:
+    app_name: myapp
+    enable_debug: false
+    enable_ssl: true
+
+  tasks:
+    - name: Deploy with per-item conditionals and notifications
+      aix.fsbuilder.fsbuilder:
+        owner: root
+        group: "{{ app_name }}"
+        mode: "0644"
+      loop:
+        # Always create the config directory
+        - dest: /etc/{{ app_name }}
+          state: directory
+          mode: "0755"
+
+        # Only deploy debug config in dev environments
+        - dest: /etc/{{ app_name }}/debug.conf
+          state: template
+          when: enable_debug | bool
+          notify: restart myapp
+
+        # Only deploy SSL config when SSL is enabled
+        - dest: /etc/{{ app_name }}/ssl.conf
+          state: template
+          when: enable_ssl | bool
+          notify: reload nginx
+
+        # Only deploy on Debian-family systems
+        - dest: /etc/{{ app_name }}/apt-preferences
+          state: copy
+          content: |
+            Package: {{ app_name }}
+            Pin: release a=stable
+            Pin-Priority: 900
+          when: ansible_os_family == "Debian"
+
+        # Only deploy on RedHat-family systems
+        - dest: /etc/yum.repos.d/{{ app_name }}.repo
+          state: template
+          when: ansible_os_family == "RedHat"
+
+        # Skip if already initialized (creates guard)
+        - dest: /etc/{{ app_name }}/initial-config.ini
+          state: template
+          creates: /etc/{{ app_name }}/.initialized
+          notify: restart myapp
+
+        # Mark as initialized after first deploy
+        - dest: /etc/{{ app_name }}/.initialized
+          state: exists
+
+        # Only remove temp files if they exist (removes guard)
+        - dest: /tmp/{{ app_name }}-install
+          state: absent
+          removes: /tmp/{{ app_name }}-install
+
+    - name: Deploy with error tolerance (continue on failure)
+      aix.fsbuilder.fsbuilder:
+        owner: root
+        group: root
+        mode: "0644"
+        on_error: continue
+      loop:
+        # If one config validation fails, the rest still get deployed
+        - dest: /etc/{{ app_name }}/app.conf
+          validate: "{{ app_name }} --check-config %s"
+          backup: true
+          notify: restart myapp
+
+        - dest: /etc/{{ app_name }}/logging.conf
+          backup: true
+
+        - dest: /etc/{{ app_name }}/metrics.conf
+          backup: true
+
+  handlers:
+    - name: restart myapp
+      ansible.builtin.service:
+        name: "{{ app_name }}"
+        state: restarted
+
+    - name: reload nginx
+      ansible.builtin.service:
+        name: nginx
+        state: reloaded
