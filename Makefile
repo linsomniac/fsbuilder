@@ -1,4 +1,8 @@
-.PHONY: lint format type-check test-unit test-all coverage clean build
+.PHONY: lint format format-check type-check test-unit test-all coverage clean build
+
+# AIDEV-NOTE: ANSIBLE_LOCAL_TEMP/ANSIBLE_REMOTE_TEMP set for CI/sandbox portability
+export ANSIBLE_LOCAL_TEMP ?= /tmp/ansible-local-tmp
+export ANSIBLE_REMOTE_TEMP ?= /tmp/ansible-remote-tmp
 
 lint:
 	uv run ruff check plugins/ tests/
