@@ -3,7 +3,7 @@
 ## 0.1.0 (Unreleased)
 
 ### Added
-- Initial release of `aix.fsbuilder` collection
+- Initial release of `linsomniac.fsbuilder` collection
 - Module (`plugins/modules/fsbuilder.py`) with 10 state handlers:
   `template`, `copy`, `directory`, `exists`, `touch`, `absent`, `link`,
   `hard`, `lineinfile`, `blockinfile`

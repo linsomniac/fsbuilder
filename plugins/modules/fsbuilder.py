@@ -140,13 +140,13 @@ author:
 
 EXAMPLES = r"""
 - name: Create a directory
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp
     state: directory
     mode: "0755"
 
 - name: Write content to a file
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/config.ini
     state: copy
     content: |
@@ -154,62 +154,62 @@ EXAMPLES = r"""
       setting = value
 
 - name: Copy a file from the controller
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/static.dat
     state: copy
 
 - name: Render a Jinja2 template (default state)
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/config.ini
     # state: template is the default; renders config.ini.j2
 
 - name: Render an inline template
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/version.txt
     state: template
     content: "version={{ app_version }}"
 
 - name: Create a symlink
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/current
     state: link
     src: /opt/myapp/releases/v2.1
 
 - name: Create a hard link
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/hardlink.txt
     state: hard
     src: /etc/myapp/original.txt
 
 - name: Ensure a file exists (empty if new)
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/flag
     state: exists
 
 - name: Touch a file (always update timestamp)
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/.last-deploy
     state: touch
 
 - name: Remove a file
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/legacy.conf
     state: absent
 
 - name: Remove files matching a glob
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp/conf.d/*.rpmsave
     state: absent
 
 - name: Ensure a line is present in sshd_config
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/ssh/sshd_config
     state: lineinfile
     regexp: "^PermitRootLogin"
     line: "PermitRootLogin no"
 
 - name: Manage a block in /etc/hosts
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     dest: /etc/hosts
     state: blockinfile
     marker: "# {mark} ANSIBLE MANAGED - myapp"
@@ -218,7 +218,7 @@ EXAMPLES = r"""
       192.168.1.11 app2.internal
 
 - name: Deploy myapp - comprehensive example with loop
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     owner: root
     group: myapp
     mode: "0644"
@@ -286,7 +286,7 @@ from ansible.module_utils.basic import AnsibleModule  # noqa: E402
 # Ansible resolves this via the collection namespace. For role-level usage,
 # the module_utils path must be on sys.path (handled by Ansible's loader).
 try:
-    from ansible_collections.aix.fsbuilder.plugins.module_utils.fsbuilder_common import (
+    from ansible_collections.linsomniac.fsbuilder.plugins.module_utils.fsbuilder_common import (
         NO_VALIDATE_STATES,
         VALID_STATES,
     )

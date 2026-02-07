@@ -15,7 +15,7 @@
 
   tasks:
     - name: Harden SSH configuration
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         owner: root
         group: root
         mode: "0600"
@@ -41,14 +41,14 @@
       notify: restart sshd
 
     - name: Add DNS servers to resolv.conf
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/resolv.conf
         state: lineinfile
         line: "nameserver {{ item }}"
       loop: "{{ dns_servers }}"
 
     - name: Manage /etc/hosts entries with a marked block
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/hosts
         state: blockinfile
         marker: "# {mark} ANSIBLE MANAGED - app hosts"
@@ -61,28 +61,28 @@
         mode: "0644"
 
     - name: Insert a line before a specific pattern
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/security/limits.conf
         state: lineinfile
         line: "myapp soft nofile 65536"
         insertbefore: "^# End of file"
 
     - name: Insert a line after a specific pattern
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/sysctl.conf
         state: lineinfile
         line: "net.core.somaxconn = 65535"
         insertafter: "^# Network"
 
     - name: Remove a deprecated config line
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/myapp/config.ini
         state: lineinfile
         regexp: "^deprecated_setting"
         line_state: absent
 
     - name: Remove a managed block
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/hosts
         state: blockinfile
         marker: "# {mark} OLD MANAGED BLOCK"

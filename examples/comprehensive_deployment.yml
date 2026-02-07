@@ -28,7 +28,7 @@
 
   tasks:
     - name: Complete application deployment
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         owner: root
         group: "{{ app_group }}"
         mode: "0644"

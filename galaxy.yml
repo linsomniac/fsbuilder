@@ -1,5 +1,5 @@
 ---
-namespace: aix
+namespace: linsomniac
 name: fsbuilder
 version: 0.1.0
 readme: README.md
@@ -10,7 +10,7 @@ description: >-
   (template, copy, mkdir, touch, rm, symlink, hardlink, lineinfile,
   blockinfile) into a single task.
 license:
-  - MIT
+  - CC0-1.0
 tags:
   - filesystem
   - template
@@ -20,4 +20,4 @@ tags:
   - blockinfile
 dependencies:
   ansible.builtin: ">=2.15.0"
-repository: https://github.com/aix/fsbuilder
+repository: https://github.com/linsomniac/fsbuilder

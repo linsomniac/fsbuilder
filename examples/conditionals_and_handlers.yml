@@ -12,7 +12,7 @@
 
   tasks:
     - name: Deploy with per-item conditionals and notifications
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         owner: root
         group: "{{ app_name }}"
         mode: "0644"
@@ -64,7 +64,7 @@
           removes: /tmp/{{ app_name }}-install
 
     - name: Deploy with error tolerance (continue on failure)
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         owner: root
         group: root
         mode: "0644"

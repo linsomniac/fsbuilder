@@ -1,5 +1,5 @@
 [project]
-name = "aix-fsbuilder"
+name = "linsomniac-fsbuilder"
 version = "0.1.0"
 description = "Ansible filesystem operations module"
 requires-python = ">=3.9"

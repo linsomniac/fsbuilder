@@ -13,7 +13,7 @@
 
   tasks:
     - name: Deploy myapp configuration
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         # Task-level defaults apply to all items unless overridden
         owner: root
         group: "{{ app_name }}"

@@ -1,4 +1,4 @@
-# aix.fsbuilder
+# linsomniac.fsbuilder
 
 Ansible module that consolidates multiple filesystem operations into a single
 task. Instead of writing separate `ansible.builtin.template`, `copy`, `file`,
@@ -31,11 +31,11 @@ task. Instead of writing separate `ansible.builtin.template`, `copy`, `file`,
 
 ```bash
 # From Galaxy (when published)
-ansible-galaxy collection install aix.fsbuilder
+ansible-galaxy collection install linsomniac.fsbuilder
 
 # From source
 ansible-galaxy collection build
-ansible-galaxy collection install aix-fsbuilder-0.1.0.tar.gz
+ansible-galaxy collection install linsomniac-fsbuilder-0.1.0.tar.gz
 ```
 
 ### As a Role (for role-level plugin discovery)
@@ -43,7 +43,7 @@ ansible-galaxy collection install aix-fsbuilder-0.1.0.tar.gz
 Clone the repository into your roles path:
 
 ```bash
-git clone https://github.com/aix/fsbuilder roles/fsbuilder
+git clone https://github.com/linsomniac/fsbuilder roles/fsbuilder
 ```
 
 The role includes symlinks in `action_plugins/` and `library/` that point to the
@@ -53,7 +53,7 @@ collection plugins, enabling Ansible's role-level plugin discovery.
 
 ```yaml
 - name: Deploy application config
-  aix.fsbuilder.fsbuilder:
+  linsomniac.fsbuilder.fsbuilder:
     owner: root
     group: myapp
     mode: "0644"
@@ -102,7 +102,7 @@ collection plugins, enabling Ansible's role-level plugin discovery.
 See the full parameter reference in the module's `DOCUMENTATION` string:
 
 ```bash
-ansible-doc aix.fsbuilder.fsbuilder
+ansible-doc linsomniac.fsbuilder.fsbuilder
 ```
 
 ## Development
@@ -138,4 +138,4 @@ See [design.md](design.md) for the full implementation design document and
 
 ## License
 
-MIT
+CC0

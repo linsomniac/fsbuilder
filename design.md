@@ -35,7 +35,7 @@ operations into a single task. It is composed of two cooperating components:
 - Python >= 3.9 on controller
 - Python >= 3.6 on remote hosts (ansible-core 2.15 remote requirement)
 
-**Packaging:** Ansible Collection (`aix.fsbuilder`) with role-level plugin
+**Packaging:** Ansible Collection (`linsomniac.fsbuilder`) with role-level plugin
 compatibility via symlinks.
 
 ---
@@ -43,7 +43,7 @@ compatibility via symlinks.
 ## 2. Directory Structure
 
 ```
-aix/fsbuilder/                          # Repository root
+linsomniac/fsbuilder/                          # Repository root
 ├── galaxy.yml                          # Collection metadata
 ├── README.md                           # Usage documentation
 ├── CHANGELOG.md
@@ -236,7 +236,7 @@ filesystem operations.
 
 ### Checklist
 
-- [X] Create `galaxy.yml` with collection metadata (`namespace: aix`,
+- [X] Create `galaxy.yml` with collection metadata (`namespace: linsomniac`,
       `name: fsbuilder`, `version: 0.1.0`, ansible-core >= 2.15 dependency)
 - [X] Create `pyproject.toml` with dev dependencies:
   - pytest, pytest-cov, pytest-mock
@@ -844,7 +844,7 @@ result.
 #### Collection Build
 - [X] `ansible-galaxy collection build` produces a valid tarball
 - [ ] `ansible-galaxy collection install` from tarball works
-- [ ] Verify FQCN usage: `aix.fsbuilder.fsbuilder` resolves correctly
+- [ ] Verify FQCN usage: `linsomniac.fsbuilder.fsbuilder` resolves correctly
 - [ ] Run `ansible-test sanity` (if applicable)
 
 #### Final Validation

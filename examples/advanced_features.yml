@@ -11,7 +11,7 @@
 
   tasks:
     - name: Deploy with backup and validation
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/sudoers.d/{{ app_name }}
         state: copy
         content: |
@@ -23,7 +23,7 @@
         mode: "0440"
 
     - name: Use makedirs to auto-create parent directories
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         owner: root
         group: "{{ app_name }}"
         mode: "0644"
@@ -39,7 +39,7 @@
           makedirs: true
 
     - name: Force-replace a directory with a file
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/{{ app_name }}/config
         state: copy
         content: "consolidated config\n"
@@ -49,7 +49,7 @@
         force_backup: true
 
     - name: Copy a file already on the remote host
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/{{ app_name }}/config.ini.dist
         src: /etc/{{ app_name }}/config.ini
         state: copy
@@ -58,7 +58,7 @@
         creates: /etc/{{ app_name }}/config.ini.dist
 
     - name: Use custom block markers
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/nginx/conf.d/{{ app_name }}.conf
         state: blockinfile
         # Custom markers to fit nginx comment style
@@ -73,7 +73,7 @@
         notify: reload nginx
 
     - name: Touch with specific timestamps
-      aix.fsbuilder.fsbuilder:
+      linsomniac.fsbuilder.fsbuilder:
         dest: /etc/{{ app_name }}/.migrated
         state: touch
         # Set specific access and modification times (epoch seconds)
