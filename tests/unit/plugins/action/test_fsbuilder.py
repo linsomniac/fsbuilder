@@ -331,7 +331,7 @@ class TestWhenEvaluation:
             "when": "True",
         }
         action_module._task.loop = None
-        action_module._templar.do_template.return_value = "True"
+        action_module._templar.template.return_value = "True"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         result = action_module.run(task_vars={})
@@ -347,7 +347,7 @@ class TestWhenEvaluation:
             "when": "False",
         }
         action_module._task.loop = None
-        action_module._templar.do_template.return_value = "False"
+        action_module._templar.template.return_value = "False"
         action_module._execute_module = MagicMock()
 
         result = action_module.run(task_vars={})
@@ -364,7 +364,7 @@ class TestWhenEvaluation:
             "when": "my_var == 'yes'",
         }
         action_module._task.loop = None
-        action_module._templar.do_template.return_value = "True"
+        action_module._templar.template.return_value = "True"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         result = action_module.run(task_vars={"my_var": "yes"})
@@ -382,7 +382,7 @@ class TestWhenEvaluation:
             "when": "undefined_var",
         }
         action_module._task.loop = None
-        action_module._templar.do_template.side_effect = Exception("undefined")
+        action_module._templar.template.side_effect = Exception("undefined")
 
         with pytest.raises(AnsibleError, match="when.*evaluation failed"):
             action_module.run(task_vars={})
@@ -395,7 +395,7 @@ class TestWhenEvaluation:
             "when": "True",
         }
         action_module._task.loop = None
-        action_module._templar.do_template.return_value = "True"
+        action_module._templar.template.return_value = "True"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         action_module.run(task_vars={})
@@ -405,40 +405,40 @@ class TestWhenEvaluation:
 
     def test_evaluate_when_boolean_coercion(self, action_module: ActionModule) -> None:
         """Boolean string values are properly coerced."""
-        action_module._templar.do_template.return_value = "yes"
+        action_module._templar.template.return_value = "yes"
         assert action_module._evaluate_when("some_expr", {}) is True
 
-        action_module._templar.do_template.return_value = "no"
+        action_module._templar.template.return_value = "no"
         assert action_module._evaluate_when("some_expr", {}) is False
 
-        action_module._templar.do_template.return_value = ""
+        action_module._templar.template.return_value = ""
         assert action_module._evaluate_when("some_expr", {}) is False
 
-        action_module._templar.do_template.return_value = True
+        action_module._templar.template.return_value = True
         assert action_module._evaluate_when("some_expr", {}) is True
 
-        action_module._templar.do_template.return_value = False
+        action_module._templar.template.return_value = False
         assert action_module._evaluate_when("some_expr", {}) is False
 
     def test_when_bool_true_shortcircuits(self, action_module: ActionModule) -> None:
         """Boolean True value short-circuits without Templar evaluation."""
         assert action_module._evaluate_when(True, {}) is True
-        action_module._templar.do_template.assert_not_called()
+        action_module._templar.template.assert_not_called()
 
     def test_when_bool_false_shortcircuits(self, action_module: ActionModule) -> None:
         """Boolean False value short-circuits without Templar evaluation."""
         assert action_module._evaluate_when(False, {}) is False
-        action_module._templar.do_template.assert_not_called()
+        action_module._templar.template.assert_not_called()
 
     def test_when_list_and_evaluates_all(self, action_module: ActionModule) -> None:
         """List of when expressions are AND-evaluated."""
         # Both True -> True
-        action_module._templar.do_template.return_value = "True"
+        action_module._templar.template.return_value = "True"
         assert action_module._evaluate_when(["expr1", "expr2"], {}) is True
 
     def test_when_list_short_circuits_on_false(self, action_module: ActionModule) -> None:
         """List of when expressions short-circuits on first False."""
-        action_module._templar.do_template.side_effect = ["True", "False"]
+        action_module._templar.template.side_effect = ["True", "False"]
         assert action_module._evaluate_when(["expr1", "expr2"], {}) is False
 
 
@@ -454,7 +454,7 @@ class TestHandlerNotification:
         }
         action_module._task.loop = None
         action_module._task.notify = None
-        action_module._templar.do_template.return_value = "True"
+        action_module._templar.template.return_value = "True"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         action_module.run(task_vars={})

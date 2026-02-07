@@ -10,11 +10,12 @@
         src: "{{ test_dir }}/check_results.txt"
       register: results
 
-    - name: Assert check mode reported changed
+    - name: Assert check mode reported changed and diff present
       ansible.builtin.assert:
         that:
           - "'copy_changed=True' in (results.content | b64decode)"
           - "'dir_changed=True' in (results.content | b64decode)"
+          - "'copy_has_diff=True' in (results.content | b64decode)"
 
     - name: Read original file
       ansible.builtin.slurp:

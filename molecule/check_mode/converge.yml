@@ -37,4 +37,5 @@
         content: |
           copy_changed={{ check_result.changed }}
           dir_changed={{ dir_check_result.changed }}
+          copy_has_diff={{ check_result.diff is defined }}
         dest: "{{ test_dir }}/check_results.txt"

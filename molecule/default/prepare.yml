@@ -8,6 +8,18 @@
   vars:
     project_dir: "{{ lookup('env', 'MOLECULE_PROJECT_DIRECTORY') }}"
   tasks:
+    - name: Remove stale tarballs
+      ansible.builtin.find:
+        paths: "{{ project_dir }}"
+        patterns: "linsomniac-fsbuilder-*.tar.gz"
+      register: stale_tarballs
+
+    - name: Delete stale tarballs
+      ansible.builtin.file:
+        path: "{{ item.path }}"
+        state: absent
+      loop: "{{ stale_tarballs.files }}"
+
     - name: Build collection tarball
       ansible.builtin.command:
         cmd: ansible-galaxy collection build --force
@@ -19,6 +31,12 @@
         paths: "{{ project_dir }}"
         patterns: "linsomniac-fsbuilder-*.tar.gz"
       register: tarball_files
+
+    - name: Assert exactly one tarball found
+      ansible.builtin.assert:
+        that:
+          - tarball_files.files | length == 1
+        fail_msg: "Expected 1 tarball, found {{ tarball_files.files | length }}"
 
     - name: Install collection from tarball
       ansible.builtin.command:

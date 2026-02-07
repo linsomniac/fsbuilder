@@ -81,11 +81,12 @@ class ActionModule(ActionBase):
             raise AnsibleError(f"fsbuilder action plugin error: {e}") from e
 
         # Step 5: Execute the module on the remote host
-        # AIDEV-NOTE: Must use FQCN so the module resolves when installed as
-        # a collection. The action plugin is already resolved via FQCN by Ansible,
-        # but _execute_module needs the full name to find the module on the remote.
+        # AIDEV-NOTE: Use self._task.action to preserve the module name from
+        # the task context. When installed as a collection, Ansible sets this
+        # to the FQCN (linsomniac.fsbuilder.fsbuilder). When used via role-level
+        # library/, it's just "fsbuilder". This avoids breaking role-level usage.
         result: dict[str, Any] = self._execute_module(
-            module_name="linsomniac.fsbuilder.fsbuilder",
+            module_name=self._task.action,
             module_args=module_args,
             task_vars=task_vars,
         )
@@ -361,7 +362,7 @@ class ActionModule(ActionBase):
             if not expr.startswith("{{"):
                 expr = "{{ " + expr + " }}"
 
-            result = self._templar.do_template(expr)
+            result = self._templar.template(expr)
 
             # Boolean coercion: handle string representations
             if isinstance(result, bool):
