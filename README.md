@@ -40,16 +40,36 @@ ansible-galaxy collection install linsomniac-fsbuilder-0.1.0.tar.gz
 
 ### As a Role (for role-level plugin discovery)
 
-Clone the repository into your roles path:
+Clone the repository and symlink the embedded role into your roles path:
 
 ```bash
-git clone https://github.com/linsomniac/fsbuilder roles/fsbuilder
+# Clone the repo (e.g. next to your playbook project)
+git clone https://github.com/linsomniac/fsbuilder .fsbuilder
+
+# Symlink the role into your roles directory
+ln -s ../.fsbuilder/roles/fsbuilder roles/fsbuilder
 ```
 
-The role includes symlinks in `action_plugins/` and `library/` that point to the
-collection plugins, enabling Ansible's role-level plugin discovery.
+The symlink preserves the relative paths inside the role so that its
+`action_plugins/` and `library/` symlinks correctly resolve back to the
+collection plugins.
 
 ## Quick Start
+
+When installed as a collection use `linsomniac.fsbuilder.fsbuilder`.
+When installed as a role use just `fsbuilder` and include the role first:
+
+```yaml
+- hosts: all
+  roles:
+    - fsbuilder          # activates role-level plugin discovery
+  tasks:
+    - name: Deploy app config
+      fsbuilder:
+        ...
+```
+
+### Collection example
 
 ```yaml
 - name: Deploy application config

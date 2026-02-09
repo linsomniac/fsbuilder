@@ -1,7 +1,7 @@
 ---
 namespace: linsomniac
 name: fsbuilder
-version: 0.1.0
+version: 0.2.0
 readme: README.md
 authors:
   - Sean
@@ -23,3 +23,39 @@ tags:
 # The minimum ansible-core version requirement is documented in README.md.
 dependencies: {}
 repository: https://github.com/linsomniac/fsbuilder
+# AIDEV-NOTE: build_ignore uses fnmatch (not gitignore). No ** recursive globs,
+# no trailing slashes. .git and <ns>-<name>-*.tar.gz are excluded by default.
+# Cache dirs need both root and '*/' prefix patterns due to fnmatch limitation.
+build_ignore:
+  # Build artifacts
+  - '*.tar.gz'
+  # Version control and CI
+  - .github
+  - .gitignore
+  # Python caches (root + subdirectory level due to fnmatch limitation)
+  - .mypy_cache
+  - '*/.mypy_cache'
+  - __pycache__
+  - '*/__pycache__'
+  - .pytest_cache
+  - '*/.pytest_cache'
+  - .ruff_cache
+  # Test infrastructure (CRITICAL - test-collections has recursive symlink loop)
+  - test-collections
+  - tests
+  - molecule
+  # Development environment
+  - .venv
+  - .vscode
+  - .idea
+  - pyproject.toml
+  - uv.lock
+  - Makefile
+  - conftest.py
+  - .coverage
+  # Internal documentation
+  - design.md
+  - fsbuilder.md
+  # AI/tool config
+  - .claude
+  - .codex
