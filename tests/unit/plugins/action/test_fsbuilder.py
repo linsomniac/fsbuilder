@@ -3,6 +3,11 @@
 AIDEV-NOTE: These tests mock the Ansible ActionBase infrastructure since the
 action plugin runs on the controller and needs access to _task, _templar,
 _connection, _find_needle, _transfer_file, and _execute_module.
+
+AIDEV-NOTE: The templar mock is set up so that copy_with_new_env() returns
+a secondary mock whose .template() method can be configured separately.
+Both file-based and inline templates use copy_with_new_env() to create a
+new templar, so tests must configure the copy's .template() return value.
 """
 
 from __future__ import annotations
@@ -41,10 +46,16 @@ def action_module() -> ActionModule:
     loader.cleanup_tmp_file.return_value = None
 
     # Mock the templar
+    # AIDEV-NOTE: copy_with_new_env() returns a separate mock templar so that
+    # file-based template tests can control its .template() return value via
+    # templar.copy_with_new_env.return_value.template.return_value.
     templar = MagicMock()
     templar.environment = MagicMock()
     templar.environment.loader = MagicMock()
     templar.environment.loader.searchpath = []
+    # Ensure copy_with_new_env returns a consistent mock for assertions
+    copy_templar = MagicMock()
+    templar.copy_with_new_env.return_value = copy_templar
 
     # Mock shared_loader_obj
     shared_loader_obj = MagicMock()
@@ -128,7 +139,10 @@ class TestTemplateHandling:
 
     def test_inline_content_template(self, action_module: ActionModule) -> None:
         """Inline content is rendered and state changed to copy."""
-        action_module._templar.template.return_value = "rendered: hello world"
+        # AIDEV-NOTE: Inline templates now also use copy_with_new_env()
+        action_module._templar.copy_with_new_env.return_value.template.return_value = (
+            "rendered: hello world"
+        )
         action_module._task.loop = None
 
         action_module._task.args = {
@@ -143,11 +157,15 @@ class TestTemplateHandling:
 
         assert result["state"] == "copy"
         assert result["content"] == "rendered: hello world"
-        action_module._templar.template.assert_called_once()
+        action_module._templar.copy_with_new_env.return_value.template.assert_called_once()
 
     def test_file_based_template_default_src(self, action_module: ActionModule) -> None:
         """Default src is basename(dest) + .j2."""
-        action_module._templar.template.return_value = "rendered content"
+        # AIDEV-NOTE: File-based templates use copy_with_new_env() which returns
+        # a new templar; set the return value on that copy's template method.
+        action_module._templar.copy_with_new_env.return_value.template.return_value = (
+            "rendered content"
+        )
         action_module._find_needle = MagicMock(return_value="/path/to/templates/config.ini.j2")
         action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
@@ -167,13 +185,15 @@ class TestTemplateHandling:
         # Vault support: get_real_file/cleanup_tmp_file called
         action_module._loader.get_real_file.assert_called_once()
         action_module._loader.cleanup_tmp_file.assert_called_once()
+        # copy_with_new_env should have been called with searchpath and task_vars
+        action_module._templar.copy_with_new_env.assert_called_once()
         assert result["state"] == "copy"
         assert result["content"] == "rendered content"
         assert "src" not in result
 
     def test_dest_ending_with_slash(self, action_module: ActionModule) -> None:
         """Dest ending with / gets src basename appended (minus .j2)."""
-        action_module._templar.template.return_value = "content"
+        action_module._templar.copy_with_new_env.return_value.template.return_value = "content"
         action_module._find_needle = MagicMock(return_value="/path/to/templates/app.conf.j2")
         action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
@@ -276,7 +296,7 @@ class TestRunDispatch:
             "content": "{{ var }}",
         }
         action_module._task.loop = None
-        action_module._templar.template.return_value = "rendered"
+        action_module._templar.copy_with_new_env.return_value.template.return_value = "rendered"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         result = action_module.run(task_vars={})
@@ -566,7 +586,9 @@ class TestTemplateRenderingOptions:
         self, action_module: ActionModule
     ) -> None:
         """Template rendering options are stripped from module args for file templates."""
-        action_module._templar.template.return_value = "rendered content"
+        action_module._templar.copy_with_new_env.return_value.template.return_value = (
+            "rendered content"
+        )
         action_module._find_needle = MagicMock(return_value="/path/to/templates/config.j2")
         action_module._task.get_search_path = MagicMock(return_value=["/path/to"])
 
@@ -601,7 +623,9 @@ class TestTemplateRenderingOptions:
         self, action_module: ActionModule
     ) -> None:
         """Template rendering options are stripped from module args for inline templates."""
-        action_module._templar.template.return_value = "rendered inline"
+        action_module._templar.copy_with_new_env.return_value.template.return_value = (
+            "rendered inline"
+        )
 
         args = {
             "dest": "/etc/myapp/version.txt",
@@ -634,7 +658,7 @@ class TestTemplateRenderingOptions:
             "output_encoding": "utf-8",
         }
         action_module._task.loop = None
-        action_module._templar.template.return_value = "rendered"
+        action_module._templar.copy_with_new_env.return_value.template.return_value = "rendered"
         action_module._execute_module = MagicMock(return_value={"changed": True})
 
         result = action_module.run(task_vars={"var": "value"})
@@ -648,3 +672,88 @@ class TestTemplateRenderingOptions:
         assert "lstrip_blocks" not in module_args
         assert "newline_sequence" not in module_args
         assert "output_encoding" not in module_args
+
+
+class TestCopyWithNewEnv:
+    """Test that template rendering uses copy_with_new_env().
+
+    AIDEV-NOTE: ansible-core 2.20+ deprecates direct access to
+    templar.environment (removed in 2.23). copy_with_new_env() has been
+    available since ansible-core 2.12, so no fallback is needed.
+    """
+
+    def test_file_template_calls_copy_with_new_env(self, action_module: ActionModule) -> None:
+        """File-based template calls copy_with_new_env with searchpath and vars."""
+        copy_templar = action_module._templar.copy_with_new_env.return_value
+        copy_templar.template.return_value = "rendered via copy"
+        action_module._find_needle = MagicMock(return_value="/path/to/templates/test.conf.j2")
+        action_module._task.get_search_path = MagicMock(return_value=["/role/path"])
+
+        mock_file = MagicMock()
+        mock_file.read.return_value = "{{ var }}"
+        mock_file.__enter__ = MagicMock(return_value=mock_file)
+        mock_file.__exit__ = MagicMock(return_value=False)
+
+        with patch("builtins.open", return_value=mock_file):
+            args = {"dest": "/etc/test.conf", "state": "template"}
+            result = action_module._process_template_file(
+                args, {"var": "hello"}, args["dest"], None
+            )
+
+        # copy_with_new_env was called with searchpath and task_vars
+        action_module._templar.copy_with_new_env.assert_called_once()
+        call_kwargs = action_module._templar.copy_with_new_env.call_args.kwargs
+        # searchpath should have template dir prepended
+        assert call_kwargs["searchpath"][0] == "/path/to/templates"
+        assert call_kwargs["available_variables"] == {"var": "hello"}
+        # The copy templar's template() was used for rendering
+        copy_templar.template.assert_called_once()
+        assert result["content"] == "rendered via copy"
+
+    def test_inline_template_calls_copy_with_new_env(self, action_module: ActionModule) -> None:
+        """Inline content template calls copy_with_new_env with vars."""
+        copy_templar = action_module._templar.copy_with_new_env.return_value
+        copy_templar.template.return_value = "rendered inline"
+
+        args = {
+            "dest": "/etc/file.txt",
+            "state": "template",
+            "content": "{{ var }}",
+        }
+        result = action_module._process_template_content(args, {"var": "hello"})
+
+        action_module._templar.copy_with_new_env.assert_called_once_with(
+            available_variables={"var": "hello"}
+        )
+        copy_templar.template.assert_called_once()
+        assert result["content"] == "rendered inline"
+        assert result["state"] == "copy"
+
+    def test_file_template_searchpath_includes_template_dir(
+        self, action_module: ActionModule
+    ) -> None:
+        """Searchpath has template's directory prepended to task search path."""
+        copy_templar = action_module._templar.copy_with_new_env.return_value
+        copy_templar.template.return_value = "content"
+        action_module._find_needle = MagicMock(
+            return_value="/roles/myrole/templates/sub/app.conf.j2"
+        )
+        action_module._task.get_search_path = MagicMock(
+            return_value=["/roles/myrole", "/playbook/dir"]
+        )
+
+        mock_file = MagicMock()
+        mock_file.read.return_value = "template"
+        mock_file.__enter__ = MagicMock(return_value=mock_file)
+        mock_file.__exit__ = MagicMock(return_value=False)
+
+        with patch("builtins.open", return_value=mock_file):
+            args = {"dest": "/etc/app.conf", "state": "template", "src": "sub/app.conf.j2"}
+            action_module._process_template_file(args, {}, args["dest"], args["src"])
+
+        call_kwargs = action_module._templar.copy_with_new_env.call_args.kwargs
+        assert call_kwargs["searchpath"] == [
+            "/roles/myrole/templates/sub",
+            "/roles/myrole",
+            "/playbook/dir",
+        ]

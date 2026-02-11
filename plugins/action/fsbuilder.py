@@ -205,26 +205,27 @@ class ActionModule(ActionBase):
         finally:
             self._loader.cleanup_tmp_file(real_path)
 
-        # Configure templar for template rendering options
-        # AIDEV-NOTE: We use self._templar which has access to all task_vars
-        # including facts, inventory variables, group_vars, host_vars, etc.
-        self._templar.available_variables = task_vars
-
         # AIDEV-NOTE: Configure template search paths so that Jinja2
         # {% include %} and {% import %} directives resolve relative to the
         # template's directory and Ansible's search paths.
+        # AIDEV-NOTE: Use copy_with_new_env() (available since ansible-core 2.12)
+        # to create a fresh Templar, matching ansible.builtin.template's approach.
+        # This avoids the deprecated direct access to templar.environment
+        # (deprecated 2.20, removed 2.23).
         searchpath = self._task.get_search_path()
         searchpath.insert(0, os.path.dirname(source_path))
-        self._templar.environment.loader.searchpath = searchpath
+
+        data_templar = self._templar.copy_with_new_env(
+            searchpath=searchpath, available_variables=task_vars
+        )
 
         # AIDEV-NOTE: Template rendering options (trim_blocks, lstrip_blocks,
         # newline_sequence, output_encoding) are currently stripped and not
         # applied to the Jinja2 environment. Full support would require
-        # creating a new templar environment with these overrides, similar to
-        # ansible.builtin.template's approach. This is a known limitation.
-        # Render the template
+        # passing overrides to template(), similar to ansible.builtin.template's
+        # approach. This is a known limitation.
         try:
-            rendered = self._templar.template(
+            rendered = data_templar.template(
                 template_data,
                 preserve_trailing_newlines=True,
                 escape_backslashes=False,
@@ -253,10 +254,10 @@ class ActionModule(ActionBase):
         """Render an inline content string as a Jinja2 template."""
         content = args.get("content", "")
 
-        self._templar.available_variables = task_vars
+        data_templar = self._templar.copy_with_new_env(available_variables=task_vars)
 
         try:
-            rendered = self._templar.template(
+            rendered = data_templar.template(
                 content,
                 preserve_trailing_newlines=True,
                 escape_backslashes=False,
