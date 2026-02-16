@@ -44,6 +44,9 @@ build_ignore:
   - test-collections
   - tests
   - molecule
+  # Role-based install helper (not part of the collection, has no README which
+  # causes Galaxy import to fail with "No role readme found")
+  - roles
   # Development environment
   - .venv
   - .vscode
