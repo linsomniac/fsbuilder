@@ -87,6 +87,7 @@ When installed as a role use just `fsbuilder` and include the role first:
     - dest: /etc/myapp/config.ini
       validate: "myapp --check-config %s"
       backup: true
+      notify: "Restart myapp"
 
     # Write literal content
     - dest: /etc/myapp/version.txt
