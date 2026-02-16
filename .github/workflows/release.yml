@@ -1,0 +1,60 @@
+---
+name: Release to Ansible Galaxy
+
+# AIDEV-NOTE: Triggers on semver tags (v1.2.3). The version is extracted from
+# the tag, validated, and injected into galaxy.yml before building. Tests must
+# pass before publishing (via reusable workflow call to test.yml).
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Run Tests Before Release
+    uses: ./.github/workflows/test.yml
+
+  release:
+    name: Build & Publish to Galaxy
+    needs: test
+    runs-on: ubuntu-latest
+    environment: release
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5  # v4
+        with:
+          persist-credentials: false
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF#refs/tags/}"
+          VERSION="${TAG#v}"
+          if ! echo "$VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+            echo "::error::Tag '$TAG' does not produce a valid semver version: '$VERSION'"
+            exit 1
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+
+      - name: Inject version into galaxy.yml
+        run: sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" galaxy.yml
+
+      - name: Verify version was injected
+        run: grep -q "^version: ${{ steps.version.outputs.version }}$" galaxy.yml
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install ansible-core
+        run: uv sync --extra dev
+
+      - name: Build collection
+        run: uv run ansible-galaxy collection build --force
+
+      - name: Publish to Ansible Galaxy
+        run: uv run ansible-galaxy collection publish linsomniac-fsbuilder-*.tar.gz --api-key "${{ secrets.GALAXY_API_KEY }}"
