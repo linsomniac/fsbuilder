@@ -39,10 +39,12 @@ jobs:
           echo "version=$VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Inject version into galaxy.yml
-        run: sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" galaxy.yml
+        run: >
+          sed -i "s/^version:.*/version: ${{ steps.version.outputs.version }}/" galaxy.yml
 
       - name: Verify version was injected
-        run: grep -q "^version: ${{ steps.version.outputs.version }}$" galaxy.yml
+        run: >
+          grep -q "^version: ${{ steps.version.outputs.version }}$" galaxy.yml
 
       - name: Install uv
         uses: astral-sh/setup-uv@e4db8464a088ece1b920f60402e813ea4de65b8f  # v4
@@ -57,4 +59,7 @@ jobs:
         run: uv run ansible-galaxy collection build --force
 
       - name: Publish to Ansible Galaxy
-        run: uv run ansible-galaxy collection publish linsomniac-fsbuilder-*.tar.gz --api-key "${{ secrets.GALAXY_API_KEY }}"
+        run: >
+          uv run ansible-galaxy collection publish
+          linsomniac-fsbuilder-*.tar.gz
+          --api-key "${{ secrets.GALAXY_API_KEY }}"
