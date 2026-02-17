@@ -131,7 +131,10 @@ When installed as a role use just `fsbuilder` and include the role first:
 
 ## Parameters
 
-See the full parameter reference in the module's `DOCUMENTATION` string:
+Full parameter documentation is available at
+**<https://linsomniac.github.io/fsbuilder/>**
+
+Or via the command line:
 
 ```bash
 ansible-doc linsomniac.fsbuilder.fsbuilder

@@ -22,6 +22,7 @@ tags:
 # ansible-core itself and must not be listed here (Galaxy can't resolve it).
 # The minimum ansible-core version requirement is documented in README.md.
 dependencies: {}
+documentation: https://linsomniac.github.io/fsbuilder/
 repository: https://github.com/linsomniac/fsbuilder
 # AIDEV-NOTE: build_ignore uses fnmatch (not gitignore). No ** recursive globs,
 # no trailing slashes. .git and <ns>-<name>-*.tar.gz are excluded by default.
