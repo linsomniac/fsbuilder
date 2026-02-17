@@ -59,6 +59,8 @@ build_ignore:
   # Internal documentation
   - design.md
   - fsbuilder.md
+  # Documentation generation
+  - docs
   # AI/tool config
   - .claude
   - .codex
