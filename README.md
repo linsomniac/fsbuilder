@@ -1,23 +1,47 @@
-# linsomniac.fsbuilder
+# linsomniac.fsbuilder.fsbuilder
 
 Ansible module that consolidates multiple filesystem operations into a single
 task. Instead of writing separate `ansible.builtin.template`, `copy`, `file`,
 `lineinfile`, and `blockinfile` tasks, define one `fsbuilder` task with a loop.
 
-## Supported States
 
-| State | Description |
-|-------|-------------|
-| `template` | Render Jinja2 template (default state) |
-| `copy` | Copy file or write content |
-| `directory` | Create directory |
-| `exists` | Ensure file exists (create empty if missing) |
-| `touch` | Touch file (always updates timestamp) |
-| `absent` | Remove file/directory (supports globs) |
-| `link` | Create symbolic link |
-| `hard` | Create hard link |
-| `lineinfile` | Ensure a line is present/absent in a file |
-| `blockinfile` | Ensure a block is present/absent in a file |
+## Key Features
+
+FSBuilder is a single module that provides many filesystem operations under a
+single module, so that an ansible loop can be used to provide many similar
+operations.
+
+- **Loop parameter merging**: Per-item values override task-level defaults
+- **Per-item `when`**: Conditional execution within loop items
+- **Per-item `notify`**: Handler notifications per item
+- **Template rendering**: File-based `.j2` templates and inline content
+- **Validation**: Run a command to validate files before placement
+- **Backup**: Timestamped backups before overwriting
+- **Check mode**: Full `--check` support across all states
+- **Diff mode**: `--diff` shows before/after for content changes
+- **Idempotent**: All states follow the Ansible idempotency contract
+- **Glob support**: `state: absent` supports glob patterns
+- **Rich set of operations**: Template, copy, directory, ensure file exists,
+  absent, symbolic+hard links, lineinfile, blockinfile.
+
+## Teaser Example
+
+```yaml
+- name: Deploy application configs
+  linsomniac.fsbuilder.fsbuilder:
+    owner: root
+    group: myapp
+    mode: "a=rX,u+w"
+  loop:
+    - dest: /etc/myapp/conf.d
+      state: directory
+    - dest: /etc/myapp/config.ini
+      #  src defaults to "config.ini.j2"
+      #  "type: template" is the default, so no type here
+      validate: "myapp --check-config %s"
+      backup: true
+      notify: "Restart myapp"
+```
 
 ## Requirements
 
@@ -30,12 +54,12 @@ task. Instead of writing separate `ansible.builtin.template`, `copy`, `file`,
 ### As a Collection
 
 ```bash
-# From Galaxy (when published)
+# From Galaxy
 ansible-galaxy collection install linsomniac.fsbuilder
 
 # From source
 ansible-galaxy collection build
-ansible-galaxy collection install linsomniac-fsbuilder-0.1.0.tar.gz
+ansible-galaxy collection install linsomniac-fsbuilder-VERSION.tar.gz
 ```
 
 ### As a Role (for role-level plugin discovery)
@@ -105,19 +129,6 @@ When installed as a role use just `fsbuilder` and include the role first:
       state: absent
 ```
 
-## Key Features
-
-- **Loop parameter merging**: Per-item values override task-level defaults
-- **Per-item `when`**: Conditional execution within loop items
-- **Per-item `notify`**: Handler notifications per item
-- **Template rendering**: File-based `.j2` templates and inline content
-- **Validation**: Run a command to validate files before placement
-- **Backup**: Timestamped backups before overwriting
-- **Check mode**: Full `--check` support across all states
-- **Diff mode**: `--diff` shows before/after for content changes
-- **Idempotent**: All states follow the Ansible idempotency contract
-- **Glob support**: `state: absent` supports glob patterns
-
 ## Parameters
 
 See the full parameter reference in the module's `DOCUMENTATION` string:
@@ -153,9 +164,6 @@ The module is composed of two cooperating components:
   merging, per-item `when` evaluation, and handler notification.
 - **Module** (`plugins/modules/fsbuilder.py`) -- runs on the remote target
   host. Performs all filesystem operations.
-
-See [design.md](design.md) for the full implementation design document and
-[fsbuilder.md](fsbuilder.md) for the original specification.
 
 ## License
 
