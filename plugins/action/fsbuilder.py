@@ -26,6 +26,7 @@ except ImportError:
     def trust_as_template(s: str) -> str:  # type: ignore[misc]
         return s
 
+
 # AIDEV-NOTE: AnsibleEnvironment is required for template rendering to match
 # ansible.builtin.template behavior. Without it, Jinja2's NativeEnvironment
 # may auto-convert JSON/YAML-like rendered output to native Python types
