@@ -26,6 +26,13 @@ except ImportError:
     def trust_as_template(s: str) -> str:  # type: ignore[misc]
         return s
 
+# AIDEV-NOTE: AnsibleEnvironment is required for template rendering to match
+# ansible.builtin.template behavior. Without it, Jinja2's NativeEnvironment
+# may auto-convert JSON/YAML-like rendered output to native Python types
+# (dicts/lists), collapsing multi-line content to single-line repr strings.
+# See: https://github.com/ansible/ansible/issues/46169
+from ansible.template import AnsibleEnvironment
+
 
 class ActionModule(ActionBase):
     """Controller-side action plugin for fsbuilder.
@@ -215,8 +222,17 @@ class ActionModule(ActionBase):
         searchpath = self._task.get_search_path()
         searchpath.insert(0, os.path.dirname(source_path))
 
+        # AIDEV-NOTE: We use environment_class=AnsibleEnvironment and
+        # do_template() (instead of template()) to match ansible.builtin.template
+        # behavior. template() defaults convert_data=True, which auto-converts
+        # valid JSON/YAML output into Python dicts/lists, destroying multi-line
+        # formatting. do_template() defaults convert_data=False, preserving the
+        # rendered string as-is. See ansible/plugins/action/template.py lines
+        # 137 and 151 in ansible-core source.
         data_templar = self._templar.copy_with_new_env(
-            searchpath=searchpath, available_variables=task_vars
+            environment_class=AnsibleEnvironment,
+            searchpath=searchpath,
+            available_variables=task_vars,
         )
 
         # AIDEV-NOTE: Template rendering options (trim_blocks, lstrip_blocks,
@@ -225,7 +241,7 @@ class ActionModule(ActionBase):
         # passing overrides to template(), similar to ansible.builtin.template's
         # approach. This is a known limitation.
         try:
-            rendered = data_templar.template(
+            rendered = data_templar.do_template(
                 template_data,
                 preserve_trailing_newlines=True,
                 escape_backslashes=False,
@@ -254,10 +270,16 @@ class ActionModule(ActionBase):
         """Render an inline content string as a Jinja2 template."""
         content = args.get("content", "")
 
-        data_templar = self._templar.copy_with_new_env(available_variables=task_vars)
+        # AIDEV-NOTE: Use AnsibleEnvironment + do_template() here too, same
+        # reasoning as _process_template_file -- prevent convert_data=True from
+        # collapsing JSON/YAML output into single-line Python repr strings.
+        data_templar = self._templar.copy_with_new_env(
+            environment_class=AnsibleEnvironment,
+            available_variables=task_vars,
+        )
 
         try:
-            rendered = data_templar.template(
+            rendered = data_templar.do_template(
                 content,
                 preserve_trailing_newlines=True,
                 escape_backslashes=False,
