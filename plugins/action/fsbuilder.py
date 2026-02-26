@@ -16,8 +16,8 @@ from typing import Any
 from ansible.errors import AnsibleError
 from ansible.plugins.action import ActionBase
 
-# AIDEV-NOTE: ansible-core 2.20+ requires trust_as_template() to mark file
-# content for Jinja2 rendering. Older versions (2.15-2.19) render templates
+# AIDEV-NOTE: ansible-core 2.19+ requires trust_as_template() to mark file
+# content for Jinja2 rendering. Older versions (2.15-2.18) render templates
 # without this wrapper. Import conditionally for backward compatibility.
 try:
     from ansible.template import trust_as_template
@@ -25,18 +25,6 @@ except ImportError:
 
     def trust_as_template(s: str) -> str:  # type: ignore[misc]
         return s
-
-
-# AIDEV-NOTE: AnsibleEnvironment is required on ansible-core 2.15-2.19 to
-# prevent Jinja2's NativeEnvironment from auto-converting JSON/YAML-like
-# rendered output to native Python types (dicts/lists), collapsing multi-line
-# content to single-line repr strings. On ansible-core 2.20+, the templating
-# engine was rewritten and AnsibleEnvironment no longer exists; convert_data
-# behavior is handled differently. See: https://github.com/ansible/ansible/issues/46169
-try:
-    from ansible.template import AnsibleEnvironment
-except ImportError:
-    AnsibleEnvironment = None  # type: ignore[assignment,misc]
 
 
 class ActionModule(ActionBase):
@@ -227,18 +215,14 @@ class ActionModule(ActionBase):
         searchpath = self._task.get_search_path()
         searchpath.insert(0, os.path.dirname(source_path))
 
-        # AIDEV-NOTE: On ansible-core 2.15-2.19, we pass environment_class=
-        # AnsibleEnvironment and use do_template() (which defaults convert_data=
-        # False) to prevent auto-conversion of JSON/YAML output into Python
-        # dicts/lists. On 2.20+ (where AnsibleEnvironment was removed), the
-        # templating engine no longer has this issue so we use template() directly.
-        copy_kwargs: dict[str, Any] = dict(
+        # AIDEV-NOTE: convert_data=False prevents auto-conversion of JSON/YAML
+        # output into Python dicts/lists on ansible-core 2.15-2.18. On 2.19+
+        # auto-conversion is gone, so convert_data=False is a harmless no-op
+        # (deprecated in 2.19, removed in 2.23 when no longer needed).
+        data_templar = self._templar.copy_with_new_env(
             searchpath=searchpath,
             available_variables=task_vars,
         )
-        if AnsibleEnvironment is not None:
-            copy_kwargs["environment_class"] = AnsibleEnvironment
-        data_templar = self._templar.copy_with_new_env(**copy_kwargs)
 
         # AIDEV-NOTE: Template rendering options (trim_blocks, lstrip_blocks,
         # newline_sequence, output_encoding) are currently stripped and not
@@ -246,18 +230,12 @@ class ActionModule(ActionBase):
         # passing overrides to template(), similar to ansible.builtin.template's
         # approach. This is a known limitation.
         try:
-            if AnsibleEnvironment is not None and hasattr(data_templar, "do_template"):
-                rendered = data_templar.do_template(
-                    template_data,
-                    preserve_trailing_newlines=True,
-                    escape_backslashes=False,
-                )
-            else:
-                rendered = data_templar.template(
-                    template_data,
-                    preserve_trailing_newlines=True,
-                    escape_backslashes=False,
-                )
+            rendered = data_templar.template(
+                template_data,
+                preserve_trailing_newlines=True,
+                escape_backslashes=False,
+                convert_data=False,
+            )
         except Exception as e:
             raise AnsibleError(f"fsbuilder: template rendering failed for '{src}': {e}") from e
 
@@ -282,26 +260,18 @@ class ActionModule(ActionBase):
         """Render an inline content string as a Jinja2 template."""
         content = args.get("content", "")
 
-        # AIDEV-NOTE: Same version-conditional logic as _process_template_file:
-        # use AnsibleEnvironment + do_template() on 2.15-2.19, template() on 2.20+.
-        copy_kwargs: dict[str, Any] = dict(available_variables=task_vars)
-        if AnsibleEnvironment is not None:
-            copy_kwargs["environment_class"] = AnsibleEnvironment
-        data_templar = self._templar.copy_with_new_env(**copy_kwargs)
+        # AIDEV-NOTE: convert_data=False prevents auto-conversion of JSON/YAML
+        # output into Python dicts/lists on ansible-core 2.15-2.18 (see
+        # _process_template_file for full explanation).
+        data_templar = self._templar.copy_with_new_env(available_variables=task_vars)
 
         try:
-            if AnsibleEnvironment is not None and hasattr(data_templar, "do_template"):
-                rendered = data_templar.do_template(
-                    content,
-                    preserve_trailing_newlines=True,
-                    escape_backslashes=False,
-                )
-            else:
-                rendered = data_templar.template(
-                    content,
-                    preserve_trailing_newlines=True,
-                    escape_backslashes=False,
-                )
+            rendered = data_templar.template(
+                content,
+                preserve_trailing_newlines=True,
+                escape_backslashes=False,
+                convert_data=False,
+            )
         except Exception as e:
             raise AnsibleError(f"fsbuilder: inline template rendering failed: {e}") from e
 
