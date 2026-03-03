@@ -1,9 +1,14 @@
 # linsomniac.fsbuilder.fsbuilder
 
-Ansible module that consolidates multiple filesystem operations into a single
-task. Instead of writing separate `ansible.builtin.template`, `copy`, `file`,
-`lineinfile`, and `blockinfile` tasks, define one `fsbuilder` task with a loop.
+FSBuilder is an ansible module that lets you organize filesystem manipulations
+more by what intuitively makes sense, as opposed to the ansible.builtin modules
+that require you to organize by operation (template, copy, directory, file).
 
+This helps reduce repetition of boilerplate, allowing you to focus on the
+desired outcome, rather than on the specific operations.  It also allows
+an easier to reason about and review layout of filesystem operations, compared
+to having a task that makes directories, another one that populates directories,
+and making sure making them comes before populating...
 
 ## Key Features
 

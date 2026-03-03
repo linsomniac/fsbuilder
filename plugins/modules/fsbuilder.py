@@ -142,6 +142,30 @@ author:
 """
 
 EXAMPLES = r"""
+- name: Deploy myapp - comprehensive example with loop
+  linsomniac.fsbuilder.fsbuilder:
+    owner: root
+    group: myapp
+    mode: a=rX,u+w
+  loop:
+    - dest: /etc/myapp/conf.d
+      state: directory
+    - dest: /etc/myapp/config.ini
+      validate: "myapp --check-config %s"
+      backup: true
+      notify: Restart myapp
+    - dest: /etc/myapp/version.txt
+      content: "version={{ app_version }}"
+    - dest: /etc/myapp/static.dat
+      state: copy
+    - dest: /etc/myapp/current
+      src: /opt/myapp/releases/v2.1
+      state: link
+    - dest: /etc/myapp/.last-deploy
+      state: touch
+    - dest: /etc/myapp/legacy.conf
+      state: absent
+
 - name: Create a directory
   linsomniac.fsbuilder.fsbuilder:
     dest: /etc/myapp
@@ -219,31 +243,6 @@ EXAMPLES = r"""
     block: |
       192.168.1.10 app1.internal
       192.168.1.11 app2.internal
-
-- name: Deploy myapp - comprehensive example with loop
-  linsomniac.fsbuilder.fsbuilder:
-    owner: root
-    group: myapp
-    mode: "0644"
-  loop:
-    - dest: /etc/myapp/conf.d
-      state: directory
-      mode: "0755"
-    - dest: /etc/myapp/config.ini
-      validate: "myapp --check-config %s"
-      backup: true
-    - dest: /etc/myapp/version.txt
-      state: template
-      content: "version={{ app_version }}"
-    - dest: /etc/myapp/static.dat
-      state: copy
-    - dest: /etc/myapp/current
-      state: link
-      src: /opt/myapp/releases/v2.1
-    - dest: /etc/myapp/.last-deploy
-      state: touch
-    - dest: /etc/myapp/legacy.conf
-      state: absent
 """
 
 RETURN = r"""
